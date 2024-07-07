@@ -1,5 +1,5 @@
 // TODO(cryptodeal): test `wolfssl` dep links
-// pub usingnamespace @import("ssl/wolfssl.zig");
+pub usingnamespace @import("ssl/ssl.zig");
 
 /// 512kb shared receive buffer.
 const RECV_BUFFER_LENGTH = 524288;
@@ -28,3 +28,7 @@ pub const SocketCtxOpts = struct {
     ssl_ciphers: []const u8,
     ssl_prefer_low_mem_usg: bool, // TODO: rename field/apply to TCP as well
 };
+
+test {
+    @import("std").testing.refAllDeclsRecursive(@This());
+}

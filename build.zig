@@ -46,10 +46,13 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    // dependencies
+    // SSL/crypto dependencies
     const openssl: *std.Build.Dependency = if (use_openssl) b.dependency("openssl", .{ .target = target, .optimize = optimize }) else undefined;
-    // TODO(cryptodeal): get `wolfssl` to build/link
-    // const wolfssl: *std.Build.Dependency = if (use_wolfssl) b.dependency("wolfssl", .{ .target = target, .optimize = optimize }) else undefined;
+    // TODO(cryptodeal): generate `wolfssl/options.h`
+    const wolfssl: *std.Build.Dependency = if (use_wolfssl) b.dependency("wolfssl", .{ .target = target, .optimize = optimize }) else undefined;
+
+    // Event loop dependencies
+    const asio: *std.Build.Dependency = if (use_asio) b.dependency("asio", .{ .target = target, .optimize = optimize }) else undefined;
 
     const lib = b.addStaticLibrary(.{
         .name = "zSockets",
@@ -61,7 +64,16 @@ pub fn build(b: *std.Build) void {
     });
     lib.linkLibC();
     if (use_openssl) lib.linkLibrary(openssl.artifact("ssl"));
-    // if (use_wolfssl) lib.linkLibrary(wolfssl.artifact("wolfssl"));
+    if (use_wolfssl) {
+        const libwolfssl = wolfssl.artifact("wolfssl");
+        lib.linkLibrary(libwolfssl);
+        lib.installLibraryHeaders(libwolfssl);
+    }
+    if (use_asio) {
+        const libasio = asio.artifact("asio"); // <== has the location of the dependency files (asio)
+        lib.linkLibrary(libasio); // <== link libasio
+        lib.installLibraryHeaders(libasio); // <== get copy asio headers to zig-out/include
+    }
 
     lib.root_module.addOptions("build_opts", shared_opts);
 
@@ -79,7 +91,7 @@ pub fn build(b: *std.Build) void {
     });
     lib_unit_tests.linkLibC();
     if (use_openssl) lib_unit_tests.linkLibrary(openssl.artifact("ssl"));
-    // if (use_wolfssl) lib_unit_tests.linkLibrary(wolfssl.artifact("wolfssl"));
+    if (use_wolfssl) lib_unit_tests.linkLibrary(wolfssl.artifact("wolfssl"));
 
     lib_unit_tests.root_module.addOptions("build_opts", shared_opts);
 
