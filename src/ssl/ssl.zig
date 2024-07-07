@@ -51,7 +51,7 @@ pub const InternalSslSocket = struct {
 
 pub fn passphraseCb(buf: []u8, rwflag: c_int, u: ?*anyopaque) c_int {
     _ = rwflag; // autofix
-    const passphrase: []const u8 = std.mem.span(@as([@ptrCast(@alignCast(u)));
+    const passphrase: []const u8 = std.mem.span(@as([*c]u8, @ptrCast(@alignCast(u))));
     @memcpy(buf[0..passphrase.len], passphrase);
     // put null at end? no?
     return @intCast(passphrase.len);
