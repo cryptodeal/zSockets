@@ -1,5 +1,6 @@
 const c = @cImport({
     @cDefine("struct_XSTAT", ""); // fix error
+    // @cInclude("wolfssl/options.h");
     @cInclude("wolfssl/wolfcrypt/settings.h");
     @cInclude("wolfssl/openssl/ssl.h");
     @cInclude("wolfssl/openssl/bio.h");
@@ -11,5 +12,7 @@ const c = @cImport({
 pub usingnamespace c;
 
 pub const Bio = c.WOLFSSL_BIO;
-
 pub const BioMethod = c.WOLFSSL_BIO_METHOD;
+pub const bioSetInit = c.wolfSSL_BIO_set_init;
+pub const Ssl = c.WOLFSSL;
+pub const SslCtx = c.WOLFSSL_CTX;
