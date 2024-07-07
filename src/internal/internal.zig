@@ -10,3 +10,5 @@ pub const PollType = enum(u4) {
     polling_out = 4,
     polling_in = 8,
 };
+
+pub const Socket = struct {};

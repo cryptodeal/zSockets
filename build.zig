@@ -46,6 +46,11 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    // dependencies
+    const openssl: *std.Build.Dependency = if (use_openssl) b.dependency("openssl", .{ .target = target, .optimize = optimize }) else undefined;
+    // TODO(cryptodeal): get `wolfssl` to build/link
+    // const wolfssl: *std.Build.Dependency = if (use_wolfssl) b.dependency("wolfssl", .{ .target = target, .optimize = optimize }) else undefined;
+
     const lib = b.addStaticLibrary(.{
         .name = "zSockets",
         // In this case the main source file is merely a path, however, in more
@@ -54,6 +59,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    lib.linkLibC();
+    if (use_openssl) lib.linkLibrary(openssl.artifact("ssl"));
+    // if (use_wolfssl) lib.linkLibrary(wolfssl.artifact("wolfssl"));
 
     lib.root_module.addOptions("build_opts", shared_opts);
 
@@ -69,6 +77,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    lib_unit_tests.linkLibC();
+    if (use_openssl) lib_unit_tests.linkLibrary(openssl.artifact("ssl"));
+    // if (use_wolfssl) lib_unit_tests.linkLibrary(wolfssl.artifact("wolfssl"));
+
     lib_unit_tests.root_module.addOptions("build_opts", shared_opts);
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);

@@ -1,3 +1,6 @@
+// TODO(cryptodeal): test `wolfssl` dep links
+// pub usingnamespace @import("ssl/wolfssl.zig");
+
 /// 512kb shared receive buffer.
 const RECV_BUFFER_LENGTH = 524288;
 /// Timeout granularity specifies +/- 4 seconds from set timeout.
