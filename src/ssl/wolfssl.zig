@@ -1,7 +1,7 @@
 const c = @cImport({
     @cDefine("struct_XSTAT", ""); // fix error
-    // @cInclude("wolfssl/options.h");
-    @cInclude("wolfssl/wolfcrypt/settings.h");
+    @cDefine("OPENSSL_EXTRA", "");
+    @cInclude("wolfssl/options.h");
     @cInclude("wolfssl/openssl/ssl.h");
     @cInclude("wolfssl/openssl/bio.h");
     @cInclude("wolfssl/openssl/err.h");

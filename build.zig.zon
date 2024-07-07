@@ -29,8 +29,8 @@
             .lazy = false, // TODO(cryptodeal): this should be lazy
         },
         .wolfssl = .{
-            .url = "https://github.com/cryptodeal/wolfssl-zig/archive/9917fea4784c55077686bcb3178d4d89e8cb233d.tar.gz",
-            .hash = "1220852eee8f1830bbb603c589a9be8394cc6c11715e990b1ccfc9ef640c8cda14a5",
+            .url = "https://github.com/cryptodeal/wolfssl-zig/archive/b4587e49884efc8288eea5250824e3d230890699.tar.gz",
+            .hash = "12203ce2f859a80991aaeff69a322a8087e89c660a9749f6a20aee0419b40ef327c0",
             .lazy = false, // TODO(cryptodeal): this should be lazy
         },
         .asio = .{
