@@ -29,8 +29,13 @@
             .lazy = false, // TODO(cryptodeal): this should be lazy
         },
         .wolfssl = .{
-            .url = "https://github.com/cryptodeal/wolfssl-zig/archive/8f4c02787a1fdc16b5df0c40d1e7933d8e3ca9ea.tar.gz",
-            .hash = "1220ad83a82a92aba0f50eea4b06c98bc7a5643bb1a4008ed3f075e9efbf72fec78c",
+            .url = "https://github.com/cryptodeal/wolfssl-zig/archive/9917fea4784c55077686bcb3178d4d89e8cb233d.tar.gz",
+            .hash = "1220852eee8f1830bbb603c589a9be8394cc6c11715e990b1ccfc9ef640c8cda14a5",
+            .lazy = false, // TODO(cryptodeal): this should be lazy
+        },
+        .asio = .{
+            .url = "https://github.com/kassane/asio/archive/65d0da34679fe6ec0e38873a7b2049c449781c15.tar.gz",
+            .hash = "1220cc9114d3265ef6cf6e8add23e7c88ebbebb0e6dd12f10b65d27f44bbac420dbb",
             .lazy = false, // TODO(cryptodeal): this should be lazy
         },
         // See `zig fetch --save <url>` for a command-line interface for adding dependencies.
@@ -61,7 +66,6 @@
         //    // actually used.
         //    .lazy = false,
         //},
-
     },
 
     // Specifies the set of files and directories that are included in this package.

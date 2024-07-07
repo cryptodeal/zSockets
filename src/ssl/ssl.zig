@@ -1,6 +1,6 @@
 const build_opts = @import("build_opts");
 const internal = @import("../internal/internal.zig");
-const ssl = if (build_opts.USE_OPENSSL) @import("openssl.zig").openssl else if (build_opts.USE_WOLFSSL) @import("wolfssl.zig").wolfssl else undefined;
+pub const ssl = if (build_opts.USE_OPENSSL) @import("openssl.zig") else if (build_opts.USE_WOLFSSL) @import("wolfssl.zig") else undefined;
 
 const Socket = internal.Socket;
 
@@ -11,7 +11,7 @@ pub const LoopSslData = struct {
     ssl_socket: *Socket,
     last_write_was_msg_more: c_int,
     msg_more: c_int,
-    shared_rbio: *ssl.BIO,
-    shared_wbio: *ssl.BIO,
-    shared_biom: *ssl.BIO_METHOD,
+    shared_rbio: *ssl.Bio,
+    shared_wbio: *ssl.Bio,
+    shared_biom: *ssl.BioMethod,
 };
