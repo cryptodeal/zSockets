@@ -7,12 +7,12 @@ zSockets is a from-scratch zig implementation of the [µSockets](https://github.
 ### Setup Dependencies
 
 #### SSL/Crypto
-[x] [OpenSSL](https://github.com/kassane/openssl-zig) (build flag: `-DUSE_OPENSSL`)
-[x] [wolfSSL](https://github.com/cryptodeal/wolfssl-zig) (build flag: `-DUSE_WOLFSSL`)
-[ ] [BoringSSL]()
+- [x] [OpenSSL](https://github.com/kassane/openssl-zig) (build flag: `-DUSE_OPENSSL`)
+- [x] [wolfSSL](https://github.com/cryptodeal/wolfssl-zig) (build flag: `-DUSE_WOLFSSL`)
+- [ ] [BoringSSL]()
 
 #### Event Loop
-[ ] io_uring (build flag: `-DUSE_IO_URING`)
-[ ] epoll (build flag: `-DUSE_EPOLL`)
-[x] [asio](https://github.com/kassane/asio) (build flag: `-DUSE_ASIO`)
+- [ ] io_uring (build flag: `-DUSE_IO_URING`)
+- [ ] epoll (build flag: `-DUSE_EPOLL`)
+- [x] [asio](https://github.com/kassane/asio) (build flag: `-DUSE_ASIO`)
 
