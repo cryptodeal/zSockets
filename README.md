@@ -16,3 +16,5 @@ zSockets is a from-scratch zig implementation of the [µSockets](https://github.
 - [ ] epoll (build flag: `-DUSE_EPOLL`)
 - [x] [asio](https://github.com/kassane/asio) (build flag: `-DUSE_ASIO`)
 
+#### Other
+- [ ] purge zig's C ABI compatability types where possible

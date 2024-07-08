@@ -1,14 +1,13 @@
-// TODO(cryptodeal): test `wolfssl` dep links
-pub usingnamespace @import("ssl/ssl.zig");
+pub const ssl = @import("crypto/ssl.zig");
 
 /// 512kb shared receive buffer.
-const RECV_BUFFER_LENGTH = 524288;
+pub const RECV_BUFFER_LENGTH = 524288;
 /// Timeout granularity specifies +/- 4 seconds from set timeout.
-const TIMEOUT_GRANULARITY = 4;
+pub const TIMEOUT_GRANULARITY = 4;
 /// 32 byte padding of receive buffer ends.
-const RECV_BUFFER_PADDING = 32;
+pub const RECV_BUFFER_PADDING = 32;
 /// Guaranteed alignment of extension memory.
-const EXT_ALIGNMENT = 16;
+pub const EXT_ALIGNMENT = 16;
 
 /// Options specifying ownership of port.
 pub const PortOptions = enum {
@@ -30,5 +29,10 @@ pub const SocketCtxOpts = struct {
 };
 
 test {
-    @import("std").testing.refAllDeclsRecursive(@This());
+    const refAllDecls = @import("std").testing.refAllDecls;
+    // const refAllDeclsRecursive = @import("std").testing.refAllDeclsRecursive;
+
+    // Note we can't recursively import Shape.zig because otherwise we try to compile
+    // std.BoundedArray(i64).Writer, which fails.
+    refAllDecls(@import("crypto/sni_tree.zig"));
 }
