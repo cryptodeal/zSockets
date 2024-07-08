@@ -1,0 +1,23 @@
+name: commit
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Format
+        run: zig fmt --check *.zig zml/ models/
+      
+      - name: Test OpenSSL
+        run: zig build test -DUSE_OPENSSL
+      
+      - name: Test WolfSSL
+        run: zig build test -DUSE_WOLFSSL
+        
