@@ -54,7 +54,7 @@ pub fn build(b: *std.Build) void {
     // Event loop dependencies
     const asio: *std.Build.Dependency = if (use_asio) b.dependency("asio", .{ .target = target, .optimize = optimize }) else undefined;
 
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addSharedLibrary(.{
         .name = "zSockets",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
@@ -63,7 +63,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     lib.linkLibC();
-    if (use_openssl) lib.linkLibrary(openssl.artifact("ssl"));
+    if (use_openssl) {
+        const libssl = openssl.artifact("ssl");
+        lib.linkLibrary(libssl);
+        lib.installLibraryHeaders(libssl);
+    }
     if (use_wolfssl) {
         const libwolfssl = wolfssl.artifact("wolfssl");
         lib.linkLibrary(libwolfssl);
@@ -74,7 +78,6 @@ pub fn build(b: *std.Build) void {
         lib.linkLibrary(libasio); // <== link libasio
         lib.installLibraryHeaders(libasio); // <== get copy asio headers to zig-out/include
     }
-
     lib.root_module.addOptions("build_opts", shared_opts);
 
     // This declares intent for the library to be installed into the standard
@@ -90,7 +93,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     lib_unit_tests.linkLibC();
-    if (use_openssl) lib_unit_tests.linkLibrary(openssl.artifact("ssl"));
+    if (use_openssl) {
+        const libssl = openssl.artifact("ssl");
+        lib_unit_tests.linkLibrary(libssl);
+        lib.installLibraryHeaders(libssl);
+    }
     if (use_wolfssl) {
         const libwolfssl = wolfssl.artifact("wolfssl");
         lib_unit_tests.linkLibrary(libwolfssl);
