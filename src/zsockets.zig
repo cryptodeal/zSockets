@@ -1,5 +1,4 @@
-// TODO(cryptodeal): test `wolfssl` dep links
-const ssl = @import("crypto/ssl.zig");
+pub const ssl = @import("crypto/ssl.zig");
 
 /// 512kb shared receive buffer.
 pub const RECV_BUFFER_LENGTH = 524288;
@@ -30,5 +29,10 @@ pub const SocketCtxOpts = struct {
 };
 
 test {
-    // TODO: add unit tests
+    const refAllDecls = @import("std").testing.refAllDecls;
+    // const refAllDeclsRecursive = @import("std").testing.refAllDeclsRecursive;
+
+    // Note we can't recursively import Shape.zig because otherwise we try to compile
+    // std.BoundedArray(i64).Writer, which fails.
+    refAllDecls(@import("crypto/sni_tree.zig"));
 }
