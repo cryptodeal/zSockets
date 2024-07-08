@@ -1,4 +1,4 @@
-const c = @cImport({
+pub const c = @cImport({
     @cDefine("struct_XSTAT", ""); // fix error
     @cDefine("OPENSSL_EXTRA", "");
     @cInclude("wolfssl/options.h");
@@ -8,11 +8,10 @@ const c = @cImport({
     @cInclude("wolfssl/openssl/dh.h");
 });
 
-// TODO(cryptodeal): remove, but makes it easy to browse cimport files
-pub usingnamespace c;
-
 pub const Bio = c.WOLFSSL_BIO;
+pub const bioGetData = c.wolfSSL_BIO_get_data;
 pub const BioMethod = c.WOLFSSL_BIO_METHOD;
+pub const bioSetFlags = c.wolfSSL_BIO_set_flags;
 pub const bioSetInit = c.wolfSSL_BIO_set_init;
 pub const Ssl = c.WOLFSSL;
 pub const SslCtx = c.WOLFSSL_CTX;

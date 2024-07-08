@@ -91,7 +91,11 @@ pub fn build(b: *std.Build) void {
     });
     lib_unit_tests.linkLibC();
     if (use_openssl) lib_unit_tests.linkLibrary(openssl.artifact("ssl"));
-    if (use_wolfssl) lib_unit_tests.linkLibrary(wolfssl.artifact("wolfssl"));
+    if (use_wolfssl) {
+        const libwolfssl = wolfssl.artifact("wolfssl");
+        lib_unit_tests.linkLibrary(libwolfssl);
+        lib_unit_tests.installLibraryHeaders(libwolfssl);
+    }
 
     lib_unit_tests.root_module.addOptions("build_opts", shared_opts);
 
