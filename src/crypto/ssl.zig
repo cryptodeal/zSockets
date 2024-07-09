@@ -1,7 +1,14 @@
 const build_opts = @import("build_opts");
 const internal = @import("../internal/internal.zig");
-const ssl = if (build_opts.USE_OPENSSL) @import("ssl/openssl.zig") else if (build_opts.USE_WOLFSSL) @import("ssl/wolfssl.zig") else undefined;
 const std = @import("std");
+
+const ssl = switch (build_opts.ssl_lib) {
+    .openssl => @import("ssl/openssl.zig"),
+    .wolfssl => @import("ssl/wolfssl.zig"),
+    else => @import("ssl/boringssl.zig"), // default to boringssl
+};
+
+pub const SslLibType = enum { boringssl, openssl, wolfssl };
 
 const Socket = internal.Socket;
 

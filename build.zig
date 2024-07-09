@@ -1,5 +1,10 @@
 const std = @import("std");
 
+const SslLibType = @import("src/crypto/ssl.zig").SslLibType;
+
+const Compile = std.Build.Step.Compile;
+const Dependency = std.Build.Dependency;
+
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
@@ -13,6 +18,10 @@ pub fn build(b: *std.Build) void {
     // ssl options
     const use_openssl = b.option(bool, "USE_OPENSSL", "indicates whether zSockets will use openssl") orelse false;
     const use_wolfssl = b.option(bool, "USE_WOLFSSL", "indicates whether zSockets will use wolfssl") orelse false;
+    const default_boringssl = !use_openssl and !use_wolfssl;
+    const use_boringssl = b.option(bool, "USE_BORINGSSL", "indicates whether zSockets will use boringssl") orelse if (default_boringssl) true else false;
+    const ssl_type: SslLibType = if (use_boringssl) .boringssl else if (use_openssl) .openssl else .wolfssl;
+
     // event loop options
     const use_io_uring = b.option(bool, "USE_IO_URING", "indicates whether zSockets will use io_uring") orelse false;
     var use_epoll = b.option(bool, "USE_EPOLL", "indicates whether zSockets will use epoll") orelse false;
@@ -32,8 +41,7 @@ pub fn build(b: *std.Build) void {
         }
     }
     var shared_opts = b.addOptions();
-    shared_opts.addOption(bool, "USE_OPENSSL", use_openssl);
-    shared_opts.addOption(bool, "USE_WOLFSSL", use_wolfssl);
+    shared_opts.addOption(SslLibType, "ssl_lib", ssl_type);
     shared_opts.addOption(bool, "USE_IO_URING", use_io_uring);
     shared_opts.addOption(bool, "USE_EPOLL", use_epoll);
     shared_opts.addOption(bool, "USE_LIBUV", use_libuv);
@@ -47,10 +55,11 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // SSL/crypto dependencies
-    const openssl: *std.Build.Dependency = if (use_openssl) b.dependency("openssl", .{ .target = target, .optimize = optimize }) else undefined;
-    // TODO(cryptodeal): generate `wolfssl/options.h`
-    const wolfssl: *std.Build.Dependency = if (use_wolfssl) b.dependency("wolfssl", .{ .target = target, .optimize = optimize }) else undefined;
-
+    const ssl_deps: SslDeps = .{
+        .openssl = if (ssl_type == .openssl) b.dependency("openssl", .{ .target = target, .optimize = optimize }) else undefined,
+        .wolfssl = if (ssl_type == .wolfssl) b.dependency("wolfssl", .{ .target = target, .optimize = optimize }) else undefined,
+        .boringssl = if (ssl_type == .boringssl) b.dependency("boringssl", .{ .target = target, .optimize = optimize }) else undefined,
+    };
     // Event loop dependencies
     const asio: *std.Build.Dependency = if (use_asio) b.dependency("asio", .{ .target = target, .optimize = optimize }) else undefined;
 
@@ -63,20 +72,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     lib.linkLibC();
-    if (use_openssl) {
-        const libssl = openssl.artifact("ssl");
-        lib.linkLibrary(libssl);
-        lib.installLibraryHeaders(libssl);
-    }
-    if (use_wolfssl) {
-        const libwolfssl = wolfssl.artifact("wolfssl");
-        lib.linkLibrary(libwolfssl);
-        lib.installLibraryHeaders(libwolfssl);
-    }
+    linkSsl(lib, ssl_type, ssl_deps);
+
     if (use_asio) {
-        const libasio = asio.artifact("asio"); // <== has the location of the dependency files (asio)
-        lib.linkLibrary(libasio); // <== link libasio
-        lib.installLibraryHeaders(libasio); // <== get copy asio headers to zig-out/include
+        const libasio = asio.artifact("asio");
+        lib.linkLibrary(libasio);
+        lib.installLibraryHeaders(libasio);
     }
     lib.root_module.addOptions("build_opts", shared_opts);
 
@@ -93,15 +94,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     lib_unit_tests.linkLibC();
-    if (use_openssl) {
-        const libssl = openssl.artifact("ssl");
-        lib_unit_tests.linkLibrary(libssl);
-        lib.installLibraryHeaders(libssl);
-    }
-    if (use_wolfssl) {
-        const libwolfssl = wolfssl.artifact("wolfssl");
-        lib_unit_tests.linkLibrary(libwolfssl);
-        lib_unit_tests.installLibraryHeaders(libwolfssl);
+    linkSsl(lib_unit_tests, ssl_type, ssl_deps);
+
+    if (use_asio) {
+        const libasio = asio.artifact("asio");
+        lib_unit_tests.linkLibrary(libasio);
+        lib_unit_tests.installLibraryHeaders(libasio);
     }
 
     lib_unit_tests.root_module.addOptions("build_opts", shared_opts);
@@ -113,4 +111,30 @@ pub fn build(b: *std.Build) void {
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);
+}
+
+const SslDeps = struct {
+    boringssl: *Dependency,
+    openssl: *Dependency,
+    wolfssl: *Dependency,
+};
+
+pub fn linkSsl(c: *Compile, ssl_type: SslLibType, deps: SslDeps) void {
+    switch (ssl_type) {
+        .boringssl => {
+            const libboringssl = deps.boringssl.artifact("ssl");
+            c.linkLibrary(libboringssl);
+            c.installLibraryHeaders(libboringssl);
+        },
+        .openssl => {
+            const libssl = deps.openssl.artifact("ssl");
+            c.linkLibrary(libssl);
+            c.installLibraryHeaders(libssl);
+        },
+        else => {
+            const libwolfssl = deps.wolfssl.artifact("wolfssl");
+            c.linkLibrary(libwolfssl);
+            c.installLibraryHeaders(libwolfssl);
+        },
+    }
 }
