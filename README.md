@@ -7,14 +7,32 @@ zSockets is a from-scratch zig implementation of the [µSockets](https://github.
 ### Setup Dependencies
 
 #### SSL/Crypto
-- [x] [OpenSSL](https://github.com/kassane/openssl-zig) (build flag: `-DUSE_OPENSSL`)
-- [x] [wolfSSL](https://github.com/cryptodeal/wolfssl-zig) (build flag: `-DUSE_WOLFSSL`)
-- [ ] [BoringSSL]()
+- [ ] [OpenSSL](https://github.com/kassane/openssl-zig) (build flag: `-DUSE_OPENSSL`)
+  - [x] add/link dependency
+  - [ ] fleshed out API
+- [ ] [wolfSSL](https://github.com/cryptodeal/wolfssl-zig) (build flag: `-DUSE_WOLFSSL`)
+  - [x] add/link dependency
+  - [ ] fleshed out API
+- [ ] [BoringSSL](https://github.com/google/boringssl)
+  - [ ] add/link dependency
+  - [ ] fleshed out API
 
 #### Event Loop
 - [ ] io_uring (build flag: `-DUSE_IO_URING`)
+  - [ ] fleshed out API
 - [ ] epoll (build flag: `-DUSE_EPOLL`)
-- [x] [asio](https://github.com/kassane/asio) (build flag: `-DUSE_ASIO`)
+  - [ ] fleshed out API
+- [ ] kqueue (build flag: `-DUSE_KQUEUE`)
+  - [ ] fleshed out API
+- [ ] [asio](https://github.com/kassane/asio) (build flag: `-DUSE_ASIO`)
+  - [x] add/link dependency
+  - [ ] fleshed out API
+- [ ] [gcd](https://github.com/apple/swift-corelibs-libdispatch) (build flag: `-DUSE_GCD`)
+  - [ ] add/link dependency
+  - [ ] fleshed out API
+- [ ] [libuv](https://github.com/libuv/libuv)
+  - [ ] add/link dependency
+  - [ ] fleshed out API
 
 #### Other
 - [ ] purge zig's C ABI compatability types where possible

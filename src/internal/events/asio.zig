@@ -15,8 +15,7 @@ pub const Loop = struct {
 
 pub const Poll = struct {
     boost_block: ?*anyopaque,
-    // TODO(cryptodeal): `fd` should be `SOCKET` if windows target
-    fd: c_int,
+    fd: if (builtin.target.os.tag == .windows) *anyopaque else c_int,
     poll_type: u8,
     events: c_int,
 };

@@ -1,25 +1,29 @@
 const build_opts = @import("build_opts");
 const builtin = @import("builtin");
+const std = @import("std");
+
+const EXT_ALIGNMENT = @import("../../zsockets.zig").EXT_ALIGNMENT;
+const InternalLoopData = @import("../loop_data.zig").InternalLoopData;
+
+const StructField = std.builtin.Type.StructField;
 
 pub const SOCKET_READABLE = 1;
 pub const SOCKET_WRITABLE = 2;
 
-// TODO(cryptodeal): implement epoll/kqueue types
-// pub const Loop = switch (build_opts.USE_EPOLL) {
-//     true => struct {
-//         data: InternalLoopData align(EXT_ALIGNMENT),
-//         num_polls: usize,
-//         num_ready_polls: usize,
-//         fd: c_int,
-//         ready_polls: [1024]epoll_event,
-//     },
-//     else => struct {},
-// };
+pub const NativePoll = if (build_opts.USE_EPOLL) std.os.linux.epoll_event else std.posix.Kevent;
+
+pub const Loop = struct {
+    data: InternalLoopData align(EXT_ALIGNMENT),
+    num_polls: u64,
+    num_ready_polls: u64,
+    current_ready_poll: u64,
+    fd: c_int,
+    ready_polls: [1024]NativePoll,
+};
 
 pub const Poll = struct {
-    boost_block: ?*anyopaque,
-    // TODO(cryptodeal): `fd` should be `SOCKET` if windows target
-    fd: c_int,
-    poll_type: u8,
-    events: c_int,
+    state: packed struct {
+        fd: i28,
+        poll_type: u4,
+    } align(EXT_ALIGNMENT),
 };

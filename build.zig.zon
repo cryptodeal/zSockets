@@ -23,6 +23,11 @@
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
     .dependencies = .{
+        .boringssl = .{
+            .url = "https://github.com/cryptodeal/boringssl-zig/archive/013e07e8bd7e23663749f8af2a0706f0ad24ce60.tar.gz",
+            .hash = "12205e5781053aab9353ae3c635500ec4d80b4465ea373bbfdd59eb79a3da7aa9993",
+            .lazy = false, // TODO(cryptodeal): this should be lazy
+        },
         .openssl = .{
             .url = "https://github.com/kassane/openssl-zig/archive/3c1e4cbc8750a60863d68b0b0d647cb39de7ac4d.tar.gz",
             .hash = "1220eaaaa8cd8d200485950c6b94c3d159ed3e33b4749bc38b9a39f957ec27a75858",

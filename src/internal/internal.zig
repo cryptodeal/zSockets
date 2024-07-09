@@ -12,3 +12,5 @@ pub const PollType = enum(u4) {
 };
 
 pub const Socket = struct {};
+
+pub const UdpSocket = ?*anyopaque;
