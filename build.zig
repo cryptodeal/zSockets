@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const SslLibType = @import("src/crypto/ssl.zig").SslLibType;
+const SslType = @import("src/crypto/ssl.zig").SslType;
 
 const Compile = std.Build.Step.Compile;
 const Dependency = std.Build.Dependency;
@@ -18,9 +18,8 @@ pub fn build(b: *std.Build) void {
     // ssl options
     const use_openssl = b.option(bool, "USE_OPENSSL", "indicates whether zSockets will use openssl") orelse false;
     const use_wolfssl = b.option(bool, "USE_WOLFSSL", "indicates whether zSockets will use wolfssl") orelse false;
-    const default_boringssl = !use_openssl and !use_wolfssl;
-    const use_boringssl = b.option(bool, "USE_BORINGSSL", "indicates whether zSockets will use boringssl") orelse if (default_boringssl) true else false;
-    const ssl_type: SslLibType = if (use_boringssl) .boringssl else if (use_openssl) .openssl else .wolfssl;
+    const use_boringssl = b.option(bool, "USE_BORINGSSL", "indicates whether zSockets will use boringssl") orelse false;
+    const ssl_type: SslType = if (use_boringssl) .boringssl else if (use_openssl) .openssl else if (use_wolfssl) .wolfssl else .nossl;
 
     // event loop options
     const use_io_uring = b.option(bool, "USE_IO_URING", "indicates whether zSockets will use io_uring") orelse false;
@@ -41,7 +40,7 @@ pub fn build(b: *std.Build) void {
         }
     }
     var shared_opts = b.addOptions();
-    shared_opts.addOption(SslLibType, "ssl_lib", ssl_type);
+    shared_opts.addOption(SslType, "ssl_lib", ssl_type);
     shared_opts.addOption(bool, "USE_IO_URING", use_io_uring);
     shared_opts.addOption(bool, "USE_EPOLL", use_epoll);
     shared_opts.addOption(bool, "USE_LIBUV", use_libuv);
@@ -119,22 +118,27 @@ const SslDeps = struct {
     wolfssl: *Dependency,
 };
 
-pub fn linkSsl(c: *Compile, ssl_type: SslLibType, deps: SslDeps) void {
+pub fn linkSsl(c: *Compile, ssl_type: SslType, deps: SslDeps) void {
     switch (ssl_type) {
         .boringssl => {
-            const libboringssl = deps.boringssl.artifact("ssl");
-            c.linkLibrary(libboringssl);
-            c.installLibraryHeaders(libboringssl);
+            const libssl = deps.boringssl.artifact("ssl");
+            const libcrypto = deps.boringssl.artifact("crypto");
+            c.linkLibrary(libssl);
+            c.linkLibrary(libcrypto);
+            c.installLibraryHeaders(libssl);
         },
         .openssl => {
             const libssl = deps.openssl.artifact("ssl");
+            const libcrypto = deps.openssl.artifact("crypto");
+            c.linkLibrary(libssl);
+            c.linkLibrary(libcrypto);
+            c.installLibraryHeaders(libssl);
+        },
+        .wolfssl => {
+            const libssl = deps.wolfssl.artifact("wolfssl");
             c.linkLibrary(libssl);
             c.installLibraryHeaders(libssl);
         },
-        else => {
-            const libwolfssl = deps.wolfssl.artifact("wolfssl");
-            c.linkLibrary(libwolfssl);
-            c.installLibraryHeaders(libwolfssl);
-        },
+        else => {},
     }
 }

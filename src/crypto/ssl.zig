@@ -8,7 +8,7 @@ const ssl = switch (build_opts.ssl_lib) {
     else => @import("ssl/boringssl.zig"), // default to boringssl
 };
 
-pub const SslLibType = enum { boringssl, openssl, wolfssl };
+pub const SslType = enum { boringssl, openssl, wolfssl, nossl };
 
 const Socket = internal.Socket;
 
