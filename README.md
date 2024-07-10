@@ -2,6 +2,29 @@
 
 zSockets is a from-scratch zig implementation of the [µSockets](https://github.com/uNetworking/uSockets) library. The name is a play on [µSockets](https://github.com/uNetworking/uSockets), where the "µ" represents the metric prefix for `micro` (1e−6); here, the `z` represents the metric prefix for `zepto` (1e-21) and the Zig programming language.
 
+# Setup
+
+Clone the repository and its submodules:
+```sh
+git clone --recurse-submodules git@github.com:cryptodeal/zSockets.git
+```
+
+Once cloned, recursively init submodules:
+```sh
+git submodule update --init --recursive
+```
+
+To build with `boringssl` and `quic`:
+```sh
+zig build -DUSE_BORINGSSL -DUSE_QUIC
+```
+
+To test with `boringssl` and `quic`:
+```sh
+zig build test -DUSE_BORINGSSL -DUSE_QUIC
+```
+
+
 ## Status
 
 ### Setup Dependencies
@@ -32,6 +55,11 @@ zSockets is a from-scratch zig implementation of the [µSockets](https://github.
   - [ ] fleshed out API
 - [ ] [libuv](https://github.com/libuv/libuv)
   - [ ] add/link dependency
+  - [ ] fleshed out API
+
+#### Other
+- [ ] [lsquic](https://github.com/cryptodeal/lsquic-zig) (build flag: `-DUSE_QUIC`)
+  - [x] add/link dependency
   - [ ] fleshed out API
 
 #### Other

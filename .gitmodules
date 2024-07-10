@@ -1,0 +1,3 @@
+[submodule "vendor/lsquic"]
+	path = vendor/lsquic
+	url = git@github.com:cryptodeal/lsquic-zig.git
