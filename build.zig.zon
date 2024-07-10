@@ -38,6 +38,9 @@
             .hash = "12203ce2f859a80991aaeff69a322a8087e89c660a9749f6a20aee0419b40ef327c0",
             .lazy = false, // TODO(cryptodeal): this should be lazy
         },
+        .lsquic = .{
+            .path = "vendor/lsquic",
+        },
         .asio = .{
             .url = "https://github.com/kassane/asio/archive/65d0da34679fe6ec0e38873a7b2049c449781c15.tar.gz",
             .hash = "1220cc9114d3265ef6cf6e8add23e7c88ebbebb0e6dd12f10b65d27f44bbac420dbb",

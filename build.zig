@@ -28,6 +28,7 @@ pub fn build(b: *std.Build) void {
     const use_gcd = b.option(bool, "USE_GCD", "indicates whether zSockets will use GCD") orelse false;
     var use_kqueue = b.option(bool, "USE_KQUEUE", "indicates whether zSockets will use kqueue") orelse false;
     const use_asio = b.option(bool, "USE_ASIO", "indicates whether zSockets will use asio") orelse false;
+    const use_quic = b.option(bool, "USE_QUIC", "indicates whether zSockets will use QUIC") orelse false;
     // if no opts are set, default based on target
     if (!use_io_uring and !use_epoll and !use_libuv and !use_gcd and !use_kqueue and !use_asio) {
         const os_tag = target.result.os.tag;
@@ -47,6 +48,7 @@ pub fn build(b: *std.Build) void {
     shared_opts.addOption(bool, "USE_GCD", use_gcd);
     shared_opts.addOption(bool, "USE_KQUEUE", use_kqueue);
     shared_opts.addOption(bool, "USE_ASIO", use_asio);
+    shared_opts.addOption(bool, "USE_QUIC", use_quic);
 
     // Standard optimization options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
@@ -61,7 +63,7 @@ pub fn build(b: *std.Build) void {
     };
     // Event loop dependencies
     const asio: *std.Build.Dependency = if (use_asio) b.dependency("asio", .{ .target = target, .optimize = optimize }) else undefined;
-
+    const lsquic: *std.Build.Dependency = if (use_quic) b.dependency("lsquic", .{ .target = target, .optimize = optimize }) else undefined;
     const lib = b.addSharedLibrary(.{
         .name = "zSockets",
         // In this case the main source file is merely a path, however, in more
@@ -77,6 +79,11 @@ pub fn build(b: *std.Build) void {
         const libasio = asio.artifact("asio");
         lib.linkLibrary(libasio);
         lib.installLibraryHeaders(libasio);
+    }
+    if (use_quic) {
+        const liblsquic = lsquic.artifact("lsquic");
+        lib.linkLibrary(liblsquic);
+        lib.installLibraryHeaders(liblsquic);
     }
     lib.root_module.addOptions("build_opts", shared_opts);
 
@@ -99,6 +106,11 @@ pub fn build(b: *std.Build) void {
         const libasio = asio.artifact("asio");
         lib_unit_tests.linkLibrary(libasio);
         lib_unit_tests.installLibraryHeaders(libasio);
+    }
+    if (use_quic) {
+        const liblsquic = lsquic.artifact("lsquic");
+        lib_unit_tests.linkLibrary(liblsquic);
+        lib_unit_tests.installLibraryHeaders(liblsquic);
     }
 
     lib_unit_tests.root_module.addOptions("build_opts", shared_opts);
