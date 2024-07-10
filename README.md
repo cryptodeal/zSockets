@@ -14,6 +14,15 @@ Once cloned, recursively init submodules:
 git submodule update --init --recursive
 ```
 
+To build with `boringssl` and `quic`:
+```sh
+zig build -DUSE_BORINGSSL -DUSE_QUIC
+```
+
+To test with `boringssl` and `quic`:
+```sh
+zig build test -DUSE_BORINGSSL -DUSE_QUIC
+```
 
 
 ## Status
