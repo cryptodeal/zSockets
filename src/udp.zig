@@ -1,8 +1,11 @@
 const bsd = @import("internal/network/bsd.zig");
 const builtin = @import("builtin");
+const socket = @import("socket.zig");
 const std = @import("std");
 
 const UDP_MAX_NUM = bsd.LIBUS_UDP_MAX_NUM;
+
+pub const SocketDescriptor = socket.SocketDescriptor;
 
 const UdpPacketBuffer = struct {
     buf: [UDP_MAX_NUM][]u8,

@@ -1,5 +1,8 @@
 pub const ssl = @import("crypto/ssl.zig");
 
+pub const Loop = @import("loop.zig").Loop;
+pub const events = @import("internal/events.zig");
+
 /// 512kb shared receive buffer.
 pub const RECV_BUFFER_LENGTH = 524288;
 /// Timeout granularity specifies +/- 4 seconds from set timeout.

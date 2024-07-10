@@ -1,10 +1,12 @@
 const build_opts = @import("build_opts");
 const builtin = @import("builtin");
+const socket = @import("../../socket.zig");
 const std = @import("std");
 
 const EXT_ALIGNMENT = @import("../../zsockets.zig").EXT_ALIGNMENT;
 const InternalLoopData = @import("../loop_data.zig").InternalLoopData;
 
+const SocketDescriptor = socket.SocketDescriptor;
 const StructField = std.builtin.Type.StructField;
 
 pub const SOCKET_READABLE = 1;
@@ -26,4 +28,8 @@ pub const Poll = struct {
         fd: i28,
         poll_type: u4,
     } align(EXT_ALIGNMENT),
+
+    pub fn pollFd(self: *Poll) SocketDescriptor {
+        return self.state.fd;
+    }
 };
