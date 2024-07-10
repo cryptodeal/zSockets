@@ -30,9 +30,10 @@ pub const SocketCtxOpts = struct {
 
 test {
     const refAllDecls = @import("std").testing.refAllDecls;
-    // const refAllDeclsRecursive = @import("std").testing.refAllDeclsRecursive;
+    const refAllDeclsRecursive = @import("std").testing.refAllDeclsRecursive;
 
     // Note we can't recursively import Shape.zig because otherwise we try to compile
     // std.BoundedArray(i64).Writer, which fails.
     refAllDecls(@import("crypto/sni_tree.zig"));
+    refAllDeclsRecursive(@import("quic.zig"));
 }
