@@ -16,8 +16,11 @@ jobs:
         run: zig fmt --check *.zig src/
       
       - name: Test OpenSSL
-        run: zig build test -DUSE_OPENSSL
+        run: zig build test -DUSE_OPENSSL -DUSE_QUIC
       
       - name: Test WolfSSL
-        run: zig build test -DUSE_WOLFSSL
+        run: zig build test -DUSE_WOLFSSL -DUSE_QUIC
+
+      - name: Test BoringSSL
+        run: zig build test -DUSE_BORINGSSL -DUSE_QUIC
         
