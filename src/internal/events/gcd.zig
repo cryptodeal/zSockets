@@ -1,4 +1,4 @@
-const EXT_ALIGNMENT = @import("../../zsockets.zig").EXT_ALIGNMENT;
+const EXT_ALIGNMENT = @import("../../constants.zig").EXT_ALIGNMENT;
 const InternalLoopData = @import("../loop_data.zig").InternalLoopData;
 
 pub const Poll = struct {

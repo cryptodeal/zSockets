@@ -1,16 +1,6 @@
 pub const ssl = @import("crypto/ssl.zig");
 
 pub const Loop = @import("loop.zig").Loop;
-pub const events = @import("internal/events.zig");
-
-/// 512kb shared receive buffer.
-pub const RECV_BUFFER_LENGTH = 524288;
-/// Timeout granularity specifies +/- 4 seconds from set timeout.
-pub const TIMEOUT_GRANULARITY = 4;
-/// 32 byte padding of receive buffer ends.
-pub const RECV_BUFFER_PADDING = 32;
-/// Guaranteed alignment of extension memory.
-pub const EXT_ALIGNMENT = 16;
 
 /// Options specifying ownership of port.
 pub const PortOptions = enum {
@@ -38,5 +28,5 @@ test {
     // Note we can't recursively import Shape.zig because otherwise we try to compile
     // std.BoundedArray(i64).Writer, which fails.
     refAllDecls(@import("crypto/sni_tree.zig"));
-    refAllDeclsRecursive(@import("quic.zig"));
+    refAllDeclsRecursive(@import("loop.zig"));
 }

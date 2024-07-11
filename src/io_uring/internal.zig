@@ -18,7 +18,7 @@ pub const PointerTags = enum(u4) {
 
 pub const Timer = struct {
     loop: *Loop,
-    fd: c_int,
+    fd: i32,
     buf: u64,
 };
 

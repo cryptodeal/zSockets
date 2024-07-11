@@ -1,12 +1,18 @@
+const build_opts = @import("build_opts");
 const events = @import("events.zig");
 const socket = @import("../socket.zig");
 const std = @import("std");
 
-const EXT_ALIGNMENT = @import("../zsockets.zig").EXT_ALIGNMENT;
+const EXT_ALIGNMENT = @import("../constants.zig").EXT_ALIGNMENT;
 const Loop = @import("../loop.zig").Loop;
 
 const Poll = events.Poll;
 const SocketDescriptor = socket.SocketDescriptor;
+
+pub const Timer = switch (build_opts.event_loop_lib) {
+    .io_uring => @import("../io_uring/internal.zig").Timer,
+    else => anyopaque,
+};
 
 pub const LowPriorityState = enum(u16) {
     none = 0,

@@ -1,7 +1,7 @@
 const build_opts = @import("build_opts");
 const builtin = @import("builtin");
 
-const EXT_ALIGNMENT = @import("../../zsockets.zig").EXT_ALIGNMENT;
+const EXT_ALIGNMENT = @import("../../constants.zig").EXT_ALIGNMENT;
 const InternalLoopData = @import("../loop_data.zig").InternalLoopData;
 
 pub const SOCKET_READABLE = 1;
