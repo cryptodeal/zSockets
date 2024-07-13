@@ -3,10 +3,11 @@ const c = @cImport({
     @cInclude("lsquic_types.h");
     @cInclude("lsxpack_header.h");
 });
+const internal = @import("internal/internal.zig");
 const udp = @import("udp.zig");
 
 const Loop = @import("loop.zig").Loop;
-const SocketDescriptor = udp.SocketDescriptor;
+const SocketDescriptor = internal.SocketDescriptor;
 const UdpSocket = udp.UdpSocket;
 
 pub const QuicListenSocket = opaque {};

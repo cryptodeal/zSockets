@@ -1,6 +1,10 @@
+const context = @import("context.zig");
 pub const ssl = @import("crypto/ssl.zig");
 
 pub const Loop = @import("loop.zig").Loop;
+pub const Socket = @import("internal/internal.zig").Socket;
+pub const SocketCtx = context.SocketCtx;
+pub const SocketCtxOpts = context.SocketCtxOpts;
 
 /// Options specifying ownership of port.
 pub const PortOptions = enum {
@@ -8,17 +12,6 @@ pub const PortOptions = enum {
     default,
     /// Port is owned by zSocket and will not be shared.
     exclusive_port,
-};
-
-/// Options for socket contexts.
-pub const SocketCtxOpts = struct {
-    key_file_path: []const u8,
-    cert_file_path: []const u8,
-    passphrase: []const u8,
-    dh_params_file_path: []const u8,
-    ca_file_path: []const u8,
-    ssl_ciphers: []const u8,
-    ssl_prefer_low_mem_usg: bool, // TODO: rename field/apply to TCP as well
 };
 
 test {
@@ -29,4 +22,5 @@ test {
     // std.BoundedArray(i64).Writer, which fails.
     refAllDecls(@import("crypto/sni_tree.zig"));
     refAllDeclsRecursive(@import("loop.zig"));
+    // refAllDecls(ssl);
 }

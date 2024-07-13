@@ -5,8 +5,6 @@ const std = @import("std");
 
 const UDP_MAX_NUM = bsd.LIBUS_UDP_MAX_NUM;
 
-pub const SocketDescriptor = socket.SocketDescriptor;
-
 const UdpPacketBuffer = struct {
     buf: [UDP_MAX_NUM][]u8,
     addr: [UDP_MAX_NUM]std.c.sockaddr.storage,
