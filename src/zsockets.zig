@@ -17,3 +17,8 @@ pub fn Network(ssl: bool, comptime extensions: Extensions) type {
         pub const ListenSocket = Socket.ListenSocket;
     };
 }
+
+test {
+    const refAllDecls = @import("std").testing.refAllDecls;
+    refAllDecls(@import("crypto/sni_tree.zig"));
+}
