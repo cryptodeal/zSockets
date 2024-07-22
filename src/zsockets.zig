@@ -1,26 +1,19 @@
-const context = @import("context.zig");
-pub const ssl = @import("crypto/ssl.zig");
+pub usingnamespace @import("internal.zig");
 
-pub const Loop = @import("loop.zig").Loop;
-pub const Socket = @import("internal/internal.zig").Socket;
-pub const SocketCtx = context.SocketCtx;
-pub const SocketCtxOpts = context.SocketCtxOpts;
-
-/// Options specifying ownership of port.
-pub const PortOptions = enum {
-    /// Default port options.
-    default,
-    /// Port is owned by zSocket and will not be shared.
-    exclusive_port,
+pub const Extensions = struct {
+    socket: type = void,
+    socket_ctx: type = void,
+    loop: type = void,
+    poll: type = void,
+    timer: type = void,
 };
 
-test {
-    const refAllDecls = @import("std").testing.refAllDecls;
-    const refAllDeclsRecursive = @import("std").testing.refAllDeclsRecursive;
-
-    // Note we can't recursively import Shape.zig because otherwise we try to compile
-    // std.BoundedArray(i64).Writer, which fails.
-    refAllDecls(@import("crypto/sni_tree.zig"));
-    refAllDeclsRecursive(@import("loop.zig"));
-    // refAllDecls(ssl);
+pub fn Network(ssl: bool, comptime extensions: Extensions) type {
+    return struct {
+        pub const Loop = @import("events.zig").Loop(ssl, extensions);
+        pub const Poll = Loop.Poll;
+        pub const Socket = Loop.Socket;
+        pub const SocketCtx = Socket.Context;
+        pub const ListenSocket = Socket.ListenSocket;
+    };
 }

@@ -1,9 +1,9 @@
 const std = @import("std");
-const zs = @import("zSockets");
+const zsockets = @import("zSockets");
+
+const zs = zsockets.Network(false, .{ .socket = EchoSocket });
 
 const Allocator = std.mem.Allocator;
-
-const ssl = false;
 
 const EchoSocket = struct {
     backpressure: []u8,
@@ -11,14 +11,17 @@ const EchoSocket = struct {
 
 const EchoCtx = struct {};
 
-fn onWakeup(_: *zs.Loop) !void {} // stub
+// Loop wakeup handler
+fn onWakeup(_: Allocator, _: *zs.Loop) !void {} // stub
+// Loop pre-iteration handler
+fn onPre(_: Allocator, _: *zs.Loop) !void {} // stub
+// Loop post-iteration handler
+fn onPost(_: Allocator, _: *zs.Loop) !void {} // stub
 
-fn onPre(_: *zs.Loop) !void {} // stub
-fn onPost(_: *zs.Loop) !void {} // stub
-
+// Socket writable handler
 fn onEchoSocketWritable(allocator: Allocator, s: *zs.Socket) !*zs.Socket {
-    const es: *EchoSocket = @ptrCast(@alignCast(s.getExt(ssl)));
-    const written = try s.write(ssl, es.backpressure, false);
+    const es: *EchoSocket = @ptrCast(@alignCast(s.getExt()));
+    const written = try s.write(es.backpressure, false);
     if (written != es.backpressure.len) {
         const new_buffer = try allocator.alloc(u8, es.backpressure.len - written);
         @memcpy(new_buffer, es.backpressure[written..]);
@@ -28,29 +31,82 @@ fn onEchoSocketWritable(allocator: Allocator, s: *zs.Socket) !*zs.Socket {
         allocator.free(es.backpressure);
         es.backpressure = &[_]u8{};
     }
-    s.setTimeout(ssl, 30);
+    s.setTimeout(30);
     return s;
 }
 
+// Socket close handler
 fn onEchoSocketClose(allocator: Allocator, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
-    const es: *EchoSocket = @ptrCast(@alignCast(s.getExt(ssl)));
+    const es: *EchoSocket = @ptrCast(@alignCast(s.getExt()));
     std.log.info("Client disconnected\n", .{});
     allocator.free(es.backpressure);
     return s;
+}
+
+// Socket half-closed handler
+fn onEchoSocketEnd(allocator: Allocator, s: *zs.Socket) !*zs.Socket {
+    try s.shutdown();
+    return s.close(allocator, 0, null);
+}
+
+// Socket data handler
+fn onEchoSocketData(allocator: Allocator, s: *zs.Socket, data: []u8) !*zs.Socket {
+    const es: *EchoSocket = @ptrCast(@alignCast(s.getExt()));
+    // print received data
+    std.log.info("Client sent: {s}\n", .{data});
+
+    // send back or buffer it
+    const written = try s.write(data, false);
+    if (written != data.len) {
+        const new_buffer = try allocator.alloc(u8, es.backpressure.len + data.len - written);
+        @memcpy(new_buffer[0..es.backpressure.len], es.backpressure);
+        @memcpy(new_buffer[es.backpressure.len..], data[written..]);
+        allocator.free(es.backpressure);
+        es.backpressure = new_buffer;
+    }
+    s.setTimeout(30);
+    return s;
+}
+
+// Socket open handler
+fn onEchoSocketOpen(_: Allocator, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
+    const es: *EchoSocket = @ptrCast(@alignCast(s.getExt()));
+    es.backpressure = &[_]u8{};
+    s.setTimeout(30);
+    std.log.info("Client connected\n", .{});
+    return s;
+}
+
+// Socket timeout handler
+fn onEchoSocketTimeout(allocator: Allocator, s: *zs.Socket) !*zs.Socket {
+    std.log.info("Client timed out\n", .{});
+    return s.close(allocator, 0, null);
 }
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-    const loop = try zs.Loop.init(allocator, null, &onWakeup, &onPre, &onPost, 0);
-    // TODO(cryptodeal): implement `Loop.Deinit()`
+    const loop = try zs.Loop.init(allocator, null, &onWakeup, &onPre, &onPost);
+    // TODO(cryptodeal): implement `Loop.deinit()` method
 
-    const options: zs.SocketCtxOpts = .{};
+    const options: zsockets.SocketCtxOpts = .{};
+    _ = options; // autofix
 
-    const echo_context = try zs.SocketCtx.init(allocator, ssl, loop, @sizeOf(EchoCtx), options);
-    _ = echo_context; // autofix
+    const echo_context = try zs.SocketCtx.init(allocator, loop);
+    // TODO(cryptodeal): implement `SocketCtx.deinit()` method
 
     // register event handlers
+    echo_context.setOnOpen(&onEchoSocketOpen);
+    echo_context.setOnData(&onEchoSocketData);
+    echo_context.setOnWritable(&onEchoSocketWritable);
+    echo_context.setOnClose(&onEchoSocketClose);
+    echo_context.setOnTimeout(&onEchoSocketTimeout);
+    echo_context.setOnEnd(&onEchoSocketEnd);
 
+    const listen_socket: *zs.ListenSocket = try echo_context.listen(allocator, "127.0.0.1", 3000, 0);
+    _ = listen_socket; // autofix
+    // TODO(cryptodeal): implement `ListenSocket.deinit()` method
+    std.log.info("Listening on port 3000\n", .{});
+    try loop.run(allocator);
 }

@@ -1,1 +1,0 @@
-const Poll = @This();
