@@ -2,8 +2,9 @@ const std = @import("std");
 const zs = @import("zSockets");
 
 const Allocator = std.mem.Allocator;
+const HttpNetwork = zsockets.Network(false, .{ .socket = HttpSocket, .socket_ctx = HttpCtx });
+const WebSocketNetwork = zsockets.Network(false, .{ .socket = WebSocket, .socket_ctx = HttpCtx });
 
-const ssl = false;
 const PBSTR = "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||";
 const PBWIDTH = 60;
 

@@ -23,8 +23,9 @@ fn onEchoSocketWritable(allocator: Allocator, s: *zs.Socket) !*zs.Socket {
     const es: *EchoSocket = @ptrCast(@alignCast(s.getExt()));
     const written = try s.write(es.backpressure, false);
     if (written != es.backpressure.len) {
-        const new_buffer = try allocator.alloc(u8, es.backpressure.len - written);
-        @memcpy(new_buffer, es.backpressure[written..]);
+        const new_len: usize = @intCast(@as(isize, @intCast(es.backpressure.len)) - written);
+        const new_buffer = try allocator.alloc(u8, new_len);
+        @memcpy(new_buffer, es.backpressure[0..new_len]);
         allocator.free(es.backpressure);
         es.backpressure = new_buffer;
     } else {
@@ -57,10 +58,12 @@ fn onEchoSocketData(allocator: Allocator, s: *zs.Socket, data: []u8) !*zs.Socket
 
     // send back or buffer it
     const written = try s.write(data, false);
-    if (written != data.len) {
-        const new_buffer = try allocator.alloc(u8, es.backpressure.len + data.len - written);
+    if (written != @as(isize, @intCast(data.len))) {
+        const new_len: usize = @intCast(@as(isize, @intCast(es.backpressure.len + data.len)) - written);
+        const new_buffer = try allocator.alloc(u8, new_len);
+
         @memcpy(new_buffer[0..es.backpressure.len], es.backpressure);
-        @memcpy(new_buffer[es.backpressure.len..], data[written..]);
+        @memcpy(new_buffer[es.backpressure.len..], data[@intCast(written)..][0..@intCast(@as(isize, @intCast(data.len)) - written)]);
         allocator.free(es.backpressure);
         es.backpressure = new_buffer;
     }
@@ -104,9 +107,8 @@ pub fn main() !void {
     echo_context.setOnTimeout(&onEchoSocketTimeout);
     echo_context.setOnEnd(&onEchoSocketEnd);
 
-    const listen_socket: *zs.ListenSocket = try echo_context.listen(allocator, "127.0.0.1", 3000, 0);
-    _ = listen_socket; // autofix
+    _ = try echo_context.listen(allocator, null, 3000, 0);
     // TODO(cryptodeal): implement `ListenSocket.deinit()` method
-    std.log.info("Listening on port 3000\n", .{});
+    std.debug.print("Listening on port 3000\n", .{});
     try loop.run(allocator);
 }

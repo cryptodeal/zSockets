@@ -18,14 +18,14 @@ pub fn Socket(comptime ssl: bool, comptime SocketExt: type, comptime SocketCtxEx
 
     const BaseSocket = struct {
         const Self = @This();
-        pub const Context = @import("context.zig").SocketCtx(ssl, SocketCtxExt, Loop, Poll, Self);
+        pub const Context = @import("context.zig").SocketCtx(ssl, SocketCtxExt, Loop, Self);
 
         pub const ListenSocket = struct {
             s: Self align(EXT_ALIGNMENT),
 
             pub fn close(self: *ListenSocket) !void {
                 if (!self.s.isClosed()) {
-                    self.s.context.unklinkListenSocket(self);
+                    self.s.context.unlinkListenSocket(self);
                     try @as(*Poll, @ptrCast(@alignCast(&self.s))).stop(self.s.context.loop);
                     try bsd.closeSocket(@as(*Poll, @ptrCast(@alignCast(&self.s))).fd());
                     self.s.next = self.s.context.loop.data.closed_head;
@@ -100,14 +100,14 @@ pub fn Socket(comptime ssl: bool, comptime SocketExt: type, comptime SocketCtxEx
     if (build_opts.ssl_lib != .nossl and ssl) {
         return struct {
             const Self = @This();
-            pub const Context = @import("context.zig").SocketCtx(ssl, SocketCtxExt, Loop, Poll, Self);
+            pub const Context = @import("context.zig").SocketCtx(ssl, SocketCtxExt, Loop, Self);
 
             pub const ListenSocket = struct {
                 s: Self align(EXT_ALIGNMENT),
 
                 pub fn close(self: *ListenSocket) !void {
                     if (!self.s.s.isClosed()) {
-                        self.s.s.context.unklinkListenSocket(self);
+                        self.s.s.context.unlinkListenSocket(self);
                         try @as(*Poll, @ptrCast(@alignCast(&self.s.s))).stop(self.s.s.context.loop);
                         try bsd.closeSocket(@as(*Poll, @ptrCast(@alignCast(&self.s))).fd());
                         self.s.next = self.s.context.loop.data.closed_head;
@@ -189,14 +189,14 @@ pub fn Socket(comptime ssl: bool, comptime SocketExt: type, comptime SocketCtxEx
     } else {
         return struct {
             const Self = @This();
-            pub const Context = @import("context.zig").SocketCtx(ssl, SocketCtxExt, Loop, Poll, Self);
+            pub const Context = @import("context.zig").SocketCtx(ssl, SocketCtxExt, Loop, Self);
 
             pub const ListenSocket = struct {
                 s: Self align(EXT_ALIGNMENT),
 
                 pub fn close(self: *ListenSocket) !void {
                     if (!self.s.isClosed()) {
-                        self.s.context.unklinkListenSocket(self);
+                        self.s.context.unlinkListenSocket(self);
                         try @as(*Poll, @ptrCast(@alignCast(&self.s))).stop(self.s.context.loop);
                         try bsd.closeSocket(@as(*Poll, @ptrCast(@alignCast(&self.s))).fd());
                         self.s.next = self.s.context.loop.data.closed_head;
@@ -290,10 +290,10 @@ pub fn Socket(comptime ssl: bool, comptime SocketExt: type, comptime SocketCtxEx
                 }
             }
 
-            pub fn write(self: *Self, data: []const u8, msg_more: bool) !usize {
+            pub fn write(self: *Self, data: []const u8, msg_more: bool) !isize {
                 if (self.isClosed() or self.isShutdown()) return 0;
                 const written = try bsd.send(self.p.fd(), data, msg_more);
-                if (written != data.len) {
+                if (written != @as(isize, @intCast(data.len))) {
                     self.context.loop.data.last_write_failed = true;
                     try self.p.change(self.context.loop, SOCKET_READABLE | SOCKET_WRITABLE);
                 }

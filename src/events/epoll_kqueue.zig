@@ -27,7 +27,7 @@ pub const SOCKET_READABLE = switch (build_opts.event_loop_lib) {
 
 pub const SOCKET_WRITABLE = switch (build_opts.event_loop_lib) {
     .epoll => std.os.EPOLL.OUT,
-    else => 1,
+    else => 2,
 };
 
 pub fn Loop(comptime ssl: bool, comptime extensions: Extensions) type {
@@ -131,9 +131,11 @@ pub fn Loop(comptime ssl: bool, comptime extensions: Extensions) type {
                 var num_entries_possibly_left: u8 = 1;
                 var i: usize = self.current_ready_poll;
                 while (i < self.num_ready_polls and num_entries_possibly_left != 0) : (i += 1) {
-                    if (getReadyPoll(self, i) == old_poll) {
-                        setReadyPoll(self, i, new_poll);
-                        num_entries_possibly_left -= 1;
+                    if (getReadyPoll(self, i)) |ready| {
+                        if (ready == old_poll) {
+                            setReadyPoll(self, i, new_poll);
+                            num_entries_possibly_left -= 1;
+                        }
                     }
                 }
             }
@@ -237,10 +239,11 @@ pub fn Loop(comptime ssl: bool, comptime extensions: Extensions) type {
             ) !void {
                 const sweep_timer = try self.createTimer(allocator, true);
                 // TODO(cryptodeal): errdefer close file handle
-                const rec_buf = try allocator.alloc(u8, RECV_BUFFER_LENGTH + RECV_BUFFER_PADDING * 2);
-                errdefer allocator.free(rec_buf);
+                const recv_buf = try allocator.alloc(u8, RECV_BUFFER_LENGTH + RECV_BUFFER_PADDING * 2);
+                errdefer allocator.free(recv_buf);
                 self.data = .{
                     .sweep_timer = sweep_timer,
+                    .recv_buf = recv_buf,
                     .ssl_data = null,
                     .head = null,
                     .iterator = null,
@@ -293,7 +296,7 @@ pub fn Loop(comptime ssl: bool, comptime extensions: Extensions) type {
                 return @ptrFromInt(loop.ready_polls[index].udata);
             }
 
-            inline fn setReadyPoll(loop: *Self, index: anytype, poll: ?*Poll) void {
+            inline fn setReadyPoll(loop: *Self, index: anytype, poll: ?*anyopaque) void {
                 loop.ready_polls[index].udata = @intFromPtr(poll);
             }
 
@@ -301,9 +304,11 @@ pub fn Loop(comptime ssl: bool, comptime extensions: Extensions) type {
                 var num_entries_possibly_left: u8 = 2;
                 var i: usize = self.current_ready_poll;
                 while (i < self.num_ready_polls and num_entries_possibly_left != 0) : (i += 1) {
-                    if (getReadyPoll(self, i) == old_poll) {
-                        setReadyPoll(self, i, new_poll);
-                        num_entries_possibly_left -= 1;
+                    if (getReadyPoll(self, i)) |ready| {
+                        if (ready == old_poll) {
+                            setReadyPoll(self, i, new_poll);
+                            num_entries_possibly_left -= 1;
+                        }
                     }
                 }
             }
@@ -345,7 +350,7 @@ pub fn Loop(comptime ssl: bool, comptime extensions: Extensions) type {
 
                     // fetch ready polls
                     // TODO: finish implementation
-                    self.num_ready_polls = try std.posix.kevent(self.fd, &.{}, self.ready_polls[0..self.num_polls], null);
+                    self.num_ready_polls = try std.posix.kevent(self.fd, &.{}, self.ready_polls[0..1024], null);
                     self.current_ready_poll = 0;
                     while (self.current_ready_poll < self.num_ready_polls) : (self.current_ready_poll += 1) {
                         const maybe_poll: ?*Poll = getReadyPoll(self, self.current_ready_poll);
@@ -357,6 +362,7 @@ pub fn Loop(comptime ssl: bool, comptime extensions: Extensions) type {
                             const err: u32 = self.ready_polls[self.current_ready_poll].flags & (std.c.EV_ERROR | std.c.EV_EOF);
                             events &= poll.events();
                             if (events != 0 or err != 0) {
+                                // std.debug.print("events: {d}, err: {d}\n", .{ events, err });
                                 try internalDispatchReadyPoll(allocator, InternalCallback(Poll, Self), Socket, poll, err, events);
                             }
                         }
@@ -368,10 +374,11 @@ pub fn Loop(comptime ssl: bool, comptime extensions: Extensions) type {
     }
 }
 
-pub fn PollT(comptime PollExt: type, comptime LoopT: type) type {
+pub fn PollT(comptime PollExt: type, comptime LoopType: type) type {
     return switch (build_opts.event_loop_lib) {
         .epoll => struct {
             const Self = @This();
+            pub const LoopT = LoopType;
 
             state: packed struct {
                 fd: i28,
@@ -392,7 +399,6 @@ pub fn PollT(comptime PollExt: type, comptime LoopT: type) type {
             pub fn deinit(self: *Self, allocator: Allocator, loop: *LoopT) void {
                 loop.num_polls -= 1;
                 allocator.destroy(self);
-                self.* = undefined;
             }
 
             pub fn pollType(self: *Self) PollType {
@@ -420,13 +426,13 @@ pub fn PollT(comptime PollExt: type, comptime LoopT: type) type {
             }
 
             pub fn events(self: *Self) u32 {
-                return ((if ((@intFromEnum(self.state.poll_type) & @intFromEnum(PollType.polling_in)) == 1) @as(u32, SOCKET_READABLE) else 0) | (if ((@intFromEnum(self.state.poll_type) & @intFromEnum(PollType.polling_out)) == 1) @as(u32, SOCKET_WRITABLE) else 0));
+                return ((if ((@intFromEnum(self.state.poll_type) & @intFromEnum(PollType.polling_in)) != 0) @as(u32, SOCKET_READABLE) else 0) | (if ((@intFromEnum(self.state.poll_type) & @intFromEnum(PollType.polling_out)) != 0) @as(u32, SOCKET_WRITABLE) else 0));
             }
 
             pub fn change(self: *Self, loop: *LoopT, events_: u32) !void {
                 const old_events = self.events();
                 if (old_events != events_) {
-                    self.state.poll_type = @enumFromInt(@intFromEnum(self.pollType()) | (if ((events_ & SOCKET_READABLE) == 1) @intFromEnum(PollType.polling_in) else 0) | (if ((events_ & SOCKET_WRITABLE) == 1) @intFromEnum(PollType.polling_out) else 0));
+                    self.state.poll_type = @enumFromInt(@intFromEnum(self.pollType()) | (if ((events_ & SOCKET_READABLE) != 0) @intFromEnum(PollType.polling_in) else 0) | (if ((events_ & SOCKET_WRITABLE) != 0) @intFromEnum(PollType.polling_out) else 0));
                     var event: std.os.epoll_event = undefined;
                     event.events = events_;
                     event.data.ptr = @intFromPtr(self);
@@ -442,6 +448,7 @@ pub fn PollT(comptime PollExt: type, comptime LoopT: type) type {
         },
         else => struct {
             const Self = @This();
+            pub const LoopT = LoopType;
 
             state: packed struct {
                 fd: i28,
@@ -452,17 +459,18 @@ pub fn PollT(comptime PollExt: type, comptime LoopT: type) type {
             pub fn init(allocator: Allocator, loop: *LoopT, fallthrough: bool, fd_: SocketDescriptor, poll_type: PollType) !*Self {
                 if (!fallthrough) loop.num_polls += 1;
                 const self = try allocator.create(Self);
-                self.* = .{ .state = .{
-                    .fd = @intCast(fd_),
-                    .poll_type = poll_type,
-                } };
+                self.* = .{
+                    .state = .{
+                        .fd = @intCast(fd_),
+                        .poll_type = poll_type,
+                    },
+                };
                 return self;
             }
 
             pub fn deinit(self: *Self, allocator: Allocator, loop: *LoopT) void {
                 loop.num_polls -= 1;
                 allocator.destroy(self);
-                self.* = undefined;
             }
 
             pub fn pollType(self: *Self) PollType {
@@ -482,7 +490,7 @@ pub fn PollT(comptime PollExt: type, comptime LoopT: type) type {
                     change_list[len] = .{
                         .ident = @intCast(fd_),
                         .filter = std.c.EVFILT_READ,
-                        .flags = if ((new_events & SOCKET_READABLE) == 1) std.c.EV_ADD else std.c.EV_DELETE,
+                        .flags = if ((new_events & SOCKET_READABLE) != 0) std.c.EV_ADD else std.c.EV_DELETE,
                         .fflags = 0,
                         .data = 0,
                         .udata = @intFromPtr(user_data),
@@ -495,7 +503,7 @@ pub fn PollT(comptime PollExt: type, comptime LoopT: type) type {
                     change_list[len] = .{
                         .ident = @intCast(fd_),
                         .filter = std.c.EVFILT_WRITE,
-                        .flags = if ((new_events & SOCKET_WRITABLE) == 1) std.c.EV_ADD else std.c.EV_DELETE,
+                        .flags = if ((new_events & SOCKET_WRITABLE) != 0) std.c.EV_ADD else std.c.EV_DELETE,
                         .fflags = 0,
                         .data = 0,
                         .udata = @intFromPtr(user_data),
@@ -503,7 +511,7 @@ pub fn PollT(comptime PollExt: type, comptime LoopT: type) type {
                     len += 1;
                 }
 
-                return std.posix.kevent(kqfd, &change_list, &.{}, null);
+                return @intCast(std.c.kevent(kqfd, change_list[0..len].ptr, len, change_list[0..0].ptr, 0, null));
             }
 
             pub fn stop(self: *Self, loop: *LoopT) !void {
@@ -518,13 +526,13 @@ pub fn PollT(comptime PollExt: type, comptime LoopT: type) type {
             }
 
             pub fn events(self: *Self) u32 {
-                return ((if ((@intFromEnum(self.state.poll_type) & @intFromEnum(PollType.polling_in)) == 1) @as(u32, SOCKET_READABLE) else 0) | (if ((@intFromEnum(self.state.poll_type) & @intFromEnum(PollType.polling_out)) == 1) @as(u32, SOCKET_WRITABLE) else 0));
+                return ((if ((@intFromEnum(self.state.poll_type) & @intFromEnum(PollType.polling_in)) != 0) @as(u32, SOCKET_READABLE) else 0) | (if ((@intFromEnum(self.state.poll_type) & @intFromEnum(PollType.polling_out)) != 0) @as(u32, SOCKET_WRITABLE) else 0));
             }
 
             pub fn change(self: *Self, loop: *LoopT, events_: u32) !void {
                 const old_events = self.events();
                 if (old_events != events_) {
-                    self.state.poll_type = @enumFromInt(@intFromEnum(self.pollType()) | (if ((events_ & SOCKET_READABLE) == 1) @intFromEnum(PollType.polling_in) else 0) | (if ((events_ & SOCKET_WRITABLE) == 1) @intFromEnum(PollType.polling_out) else 0));
+                    self.state.poll_type = @enumFromInt(@intFromEnum(self.pollType()) | (if ((events_ & SOCKET_READABLE) != 0) @intFromEnum(PollType.polling_in) else 0) | (if ((events_ & SOCKET_WRITABLE) != 0) @intFromEnum(PollType.polling_out) else 0));
                     _ = try kqueueChange(loop.fd, self.state.fd, old_events, events_, self);
                     // possibly need to set removed polls to null in pending ready poll list
                     // internalLoopUpdatePendingReadyPolls(loop, self, self, old_events, events)

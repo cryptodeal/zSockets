@@ -25,7 +25,7 @@ pub fn LoopData(comptime Loop: type, comptime Socket: type, comptime SocketCtx: 
         ssl_data: ?*anyopaque,
         pre_cb: *const fn (allocator: Allocator, loop: *Loop) anyerror!void,
         post_cb: *const fn (allocator: Allocator, loop: *Loop) anyerror!void,
-        closed_head: ?*Socket,
+        closed_head: ?*Socket = null,
         low_priority_head: ?*Socket,
         low_priority_budget: i32,
         iteration_nr: i64,
@@ -114,6 +114,9 @@ pub fn internalTimerSweep(allocator: Allocator, loop: anytype) !void {
 }
 
 pub fn internalDispatchReadyPoll(allocator: Allocator, comptime CallbackType: type, comptime SocketType: type, p: anytype, err: u32, events_: u32) !void {
+    const PollT = @TypeOf(p.*);
+    const LoopT = PollT.LoopT;
+    // std.debug.print("PollType: {d}\n", .{@intFromEnum(p.pollType())});
     switch (p.pollType()) {
         .callback => {
             const cb: *CallbackType = @ptrCast(@alignCast(p));
@@ -128,7 +131,7 @@ pub fn internalDispatchReadyPoll(allocator: Allocator, comptime CallbackType: ty
             // connect and listen sockets are both semi-sockets,
             // but each polls for different events.
             if (p.events() == SOCKET_WRITABLE) {
-                var s: *SocketType = @ptrCast(@alignCast(p));
+                var s: *SocketType = @ptrCast(p);
                 // it's possible we arrive  here with an error
                 if (err != 0) {
                     // Emit error, close but don't emit `on_close`
@@ -146,23 +149,23 @@ pub fn internalDispatchReadyPoll(allocator: Allocator, comptime CallbackType: ty
                     _ = try s.context.on_open(allocator, s, true, &.{});
                 }
             } else {
-                const listen_socket: *SocketType.ListenSocket = @ptrCast(@alignCast(p));
-                var addr: bsd.BsdAddr = undefined;
-                var client_fd = try bsd.acceptSocket(p.fd(), &addr);
+                // TODO: corrupting data here with pointer casting
+                const ls_poll: *@import("events.zig").PollT(SocketType.ListenSocket, LoopT) = @ptrCast(p);
+                const listen_socket: *SocketType.ListenSocket = &ls_poll.ext.?;
+                var addr: bsd.c.bsd_addr_t = .{};
+                var client_fd = try bsd.acceptSocket(ls_poll.fd(), &addr);
                 if (client_fd == SOCKET_ERROR) {
                     // TODO: start timer here
                 } else {
                     // TODO: stop timer here if any
-                    client_fd = try bsd.acceptSocket(p.fd(), &addr);
-                    blk: while (client_fd != SOCKET_ERROR) : (client_fd = bsd.acceptSocket(p.fd(), &addr) catch break :blk) {
-                        const context: *SocketType.Context = listen_socket.s.getCtx();
+                    outer: while (client_fd != SOCKET_ERROR) : (client_fd = bsd.acceptSocket(ls_poll.fd(), &addr) catch break :outer) {
+                        const context = listen_socket.s.getCtx();
                         // determine whether to export fd or keep here (event can be unset)
                         if (context.on_pre_open == null or context.on_pre_open.?(client_fd) == client_fd) {
                             // adopt the newly accepted socket
-                            _ = try adoptAcceptedSocket(allocator, SocketType, @TypeOf(p.*), context, client_fd, addr.getIp());
-
+                            _ = try adoptAcceptedSocket(allocator, SocketType, PollT, context, client_fd, bsd.internalGetIp(&addr));
                             // Exit accept loop if listen socket was closed in on_open handler
-                            if (listen_socket.s.isClosed()) break;
+                            if (listen_socket.s.isClosed()) break :outer;
                         }
                     }
                 }
@@ -170,13 +173,14 @@ pub fn internalDispatchReadyPoll(allocator: Allocator, comptime CallbackType: ty
         },
         .socket_shutdown, .socket => blk: {
             // only use s, not p after this point
-            var s: *SocketType = @ptrCast(@alignCast(p));
+            var s: *SocketType = @ptrCast(p);
             if (err != 0) {
                 // TODO: decide on exit code to use here
                 s = try s.close(allocator, 0, null);
                 return;
             }
-            if ((events_ & SOCKET_WRITABLE) == 1) {
+            // std.debug.print("events_ & SOCKET_WRITABLE <--> {d} & {d}\n", .{ events_, SOCKET_WRITABLE });
+            if ((events_ & SOCKET_WRITABLE) != 0) {
                 // N.B. if failed write of a socket of one loop,
                 // then adopted to another loop, this is WRONG.
                 // This is an extreme edge case.
@@ -190,7 +194,8 @@ pub fn internalDispatchReadyPoll(allocator: Allocator, comptime CallbackType: ty
                     try s.p.change(s.getCtx().loop, s.p.events() & SOCKET_READABLE);
                 }
             }
-            if ((events_ & SOCKET_READABLE) == 1) {
+            // std.debug.print("events_ & SOCKET_READABLE <--> {d} & {d}\n", .{ events_, SOCKET_READABLE });
+            if ((events_ & SOCKET_READABLE) != 0) {
                 // Contexts may prioritize down sockets that are currently readable (e.g.
                 // SSL handshake). SSL handshakes are CPU intensive, so prefer to limit the
                 // number of handshakes per loop iteration, and move the rest to the
@@ -281,14 +286,14 @@ pub fn adoptAcceptedSocket(
 
 // N.B. takes the linked list and timeout sweep into account
 fn internalFreeClosedSockets(allocator: Allocator, loop: anytype) void {
-    const Socket = @TypeOf(loop.*).Socket;
-    const Poll = @TypeOf(loop.*).Poll;
+    const LoopT = @TypeOf(loop.*);
+
     // Free all closed sockets (maybe better to reverse order?)
-    if (loop.data.closed_head) |closed_head| {
-        var maybe_s: ?*Socket = closed_head;
-        while (maybe_s) |s| : (maybe_s = loop.data.closed_head) {
+    if (loop.data.closed_head) |_| {
+        var maybe_s = loop.data.closed_head;
+        while (maybe_s) |s| {
             const next = s.next;
-            @as(*Poll, @ptrCast(@alignCast(s))).deinit(allocator, loop);
+            @as(*LoopT.Poll, @ptrCast(@alignCast(s))).deinit(allocator, loop);
             maybe_s = next;
         }
         loop.data.closed_head = null;

@@ -18,10 +18,8 @@ pub fn SocketCtx(
     comptime ssl: bool,
     comptime SocketCtxExt: type,
     comptime Loop: type,
-    comptime Poll: type,
     comptime Socket: type,
 ) type {
-    _ = Poll; // autofix
     const BaseContext = struct {
         const Self = @This();
 
@@ -459,7 +457,6 @@ pub fn SocketCtx(
                 const listen_socket_fd = try bsd.createListenSocket(host, port, options);
                 var p = try PollT(Socket.ListenSocket, Loop).init(allocator, self.loop, false, listen_socket_fd, .semi_socket);
                 try p.start(self.loop, SOCKET_READABLE);
-                // TODO: might need to add a means to init the extension
                 p.ext = .{
                     .s = .{
                         .p = undefined,
@@ -472,6 +469,7 @@ pub fn SocketCtx(
                         .ext = null,
                     },
                 };
+
                 self.linkListenSocket(&p.ext.?);
                 return &p.ext.?;
             }

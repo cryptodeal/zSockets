@@ -16,6 +16,7 @@ pub const LowPriorityState = enum(u16) {
     none = 0,
     queued = 1,
     prev_queued_in_iter = 2,
+    _,
 };
 
 /// Specifies the type of poll (and what is polled for).

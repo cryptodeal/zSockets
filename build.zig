@@ -76,6 +76,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
     lib.linkLibC();
+    lib.addIncludePath(b.path("include"));
     linkSsl(lib, ssl_type, ssl_deps);
 
     if (event_type == .asio) {
@@ -132,6 +133,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
+    echo_server_exe.linkLibC();
     echo_server_exe.root_module.addImport("zSockets", &lib.root_module);
 
     const run_echo_server = b.addRunArtifact(echo_server_exe);
@@ -145,6 +147,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
+    hammer_test_exe.linkLibC();
     hammer_test_exe.root_module.addImport("zSockets", &lib.root_module);
 
     const run_hammer_test = b.addRunArtifact(echo_server_exe);
