@@ -2,17 +2,20 @@ const build_opts = @import("build_opts");
 const bsd = @import("bsd.zig");
 const c = @import("ssl.zig");
 const internal = @import("internal.zig");
+const loop_ = @import("loop.zig");
 const sni = @import("crypto/sni_tree.zig");
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
-const PollT = @import("events.zig").PollT;
+const internalLoopUnlink = loop_.internalLoopUnlink;
 const LowPriorityState = internal.LowPriorityState;
+const PollT = @import("events.zig").PollT;
 const RECV_BUFFER_LENGTH = internal.RECV_BUFFER_LENGTH;
 const RECV_BUFFER_PADDING = internal.RECV_BUFFER_PADDING;
 const SocketCtxOpts = internal.SocketCtxOpts;
 const SocketDescriptor = internal.SocketDescriptor;
 const SOCKET_READABLE = internal.SOCKET_READABLE;
+const SOCKET_WRITABLE = internal.SOCKET_WRITABLE;
 
 pub fn SocketCtx(
     comptime ssl: bool,
@@ -39,7 +42,7 @@ pub fn SocketCtx(
         on_close: *const fn (allocator: Allocator, s: *Socket, code: i32, reason: ?*anyopaque) anyerror!*Socket,
         on_socket_timeout: *const fn (allocator: Allocator, s: *Socket) anyerror!*Socket,
         on_socket_long_timeout: ?*const fn (allocator: Allocator, s: *Socket) anyerror!*Socket = null,
-        on_connect_error: ?*const fn (s: *Socket, code: i32) anyerror!*Socket = null,
+        on_connect_error: ?*const fn (allocator: Allocator, s: *Socket, code: i32) anyerror!*Socket = null,
         on_end: *const fn (allocator: Allocator, s: *Socket) anyerror!*Socket,
         is_low_prio: *const fn (s: *Socket) LowPriorityState = &isLowPriorityHandler,
 
@@ -250,7 +253,7 @@ pub fn SocketCtx(
                 return &self.ext;
             }
 
-            pub fn getLoop(self: *Self, _: bool) *Loop {
+            pub fn getLoop(self: *Self) *Loop {
                 return self.sc.loop;
             }
 
@@ -298,6 +301,13 @@ pub fn SocketCtx(
                 ssl_on_end: *const fn (allocator: Allocator, s: *Socket) anyerror!*Socket,
             ) void {
                 self.sc.on_end = @ptrCast(ssl_on_end);
+            }
+
+            pub fn setOnConnectError(
+                self: *Self,
+                ssl_on_connect_error: *const fn (allocator: Allocator, s: *Socket, code: i32) anyerror!*Socket,
+            ) void {
+                self.sc.on_connect_error = @ptrCast(ssl_on_connect_error);
             }
 
             pub fn connect(self: *Self, allocator: Allocator, accepted_fd: SocketDescriptor, addr_ip: []u8) !*Self {
@@ -363,7 +373,7 @@ pub fn SocketCtx(
             on_close: *const fn (allocator: Allocator, s: *Socket, code: i32, reason: ?*anyopaque) anyerror!*Socket,
             on_socket_timeout: *const fn (allocator: Allocator, s: *Socket) anyerror!*Socket,
             on_socket_long_timeout: ?*const fn (allocator: Allocator, s: *Socket) anyerror!*Socket = null,
-            on_connect_error: ?*const fn (s: *Socket, code: i32) anyerror!*Socket = null,
+            on_connect_error: ?*const fn (allocator: Allocator, s: *Socket, code: i32) anyerror!*Socket = null,
             on_end: *const fn (allocator: Allocator, s: *Socket) anyerror!*Socket,
             is_low_prio: *const fn (s: *Socket) LowPriorityState = &isLowPriorityHandler,
             ext: ?SocketCtxExt = null,
@@ -381,6 +391,11 @@ pub fn SocketCtx(
                 };
                 self.internalLinkLoop(loop);
                 return self;
+            }
+
+            pub fn deinit(self: *Self, allocator: Allocator) void {
+                internalLoopUnlink(self.loop, self);
+                allocator.destroy(self);
             }
 
             // User should not call this function directly.
@@ -407,7 +422,7 @@ pub fn SocketCtx(
                 return &self.ext;
             }
 
-            pub fn getLoop(self: *Self, _: bool) *Loop {
+            pub fn getLoop(self: *Self) *Loop {
                 return self.loop;
             }
 
@@ -451,6 +466,28 @@ pub fn SocketCtx(
                 on_end: *const fn (allocator: Allocator, s: *Socket) anyerror!*Socket,
             ) void {
                 self.on_end = on_end;
+            }
+
+            pub fn setOnConnectError(
+                self: *Self,
+                on_connect_error: *const fn (allocator: Allocator, s: *Socket, code: i32) anyerror!*Socket,
+            ) void {
+                self.on_connect_error = on_connect_error;
+            }
+
+            pub fn connect(self: *Self, allocator: Allocator, host: ?[:0]const u8, port: u64, src_host: ?[:0]const u8, options: u64) !?*Socket {
+                const connect_socket_fd: SocketDescriptor = try bsd.createConnectSocket(host, port, src_host, options);
+                if (connect_socket_fd == internal.SOCKET_ERROR) return null;
+                const p = try PollT(Socket, Loop).init(allocator, self.loop, false, connect_socket_fd, .semi_socket);
+                try p.start(self.loop, SOCKET_WRITABLE);
+                const connect_socket: *Socket = @ptrCast(@alignCast(p));
+                //  Link to context so that timeout fires properly
+                connect_socket.context = self;
+                connect_socket.timeout = 255;
+                connect_socket.long_timeout = 255;
+                connect_socket.low_prio_state = .none;
+                self.linkSocket(connect_socket);
+                return connect_socket;
             }
 
             pub fn listen(self: *Self, allocator: Allocator, host: ?[:0]const u8, port: u64, options: u64) !*Socket.ListenSocket {
@@ -498,7 +535,7 @@ pub fn SocketCtx(
             }
 
             fn linkListenSocket(self: *Self, ls: *Socket.ListenSocket) void {
-                if (self.iterator != null and ls == @as(*Socket.ListenSocket, @ptrCast(@alignCast(self.iterator)))) {
+                if (@as(?*Socket.ListenSocket, @ptrCast(@alignCast(ls))) == @as(?*Socket.ListenSocket, @ptrCast(@alignCast(self.iterator)))) {
                     self.iterator = ls.s.next;
                 }
                 if (ls.s.prev == ls.s.next) {
@@ -511,6 +548,44 @@ pub fn SocketCtx(
                     }
                     if (ls.s.next) |next| next.prev = ls.s.prev;
                 }
+            }
+
+            pub fn unlinkListenSocket(self: *Self, ls: *Socket.ListenSocket) void {
+                if (ls == @as(*Socket.ListenSocket, @ptrCast(@alignCast(self.iterator)))) {
+                    self.iterator = ls.s.next;
+                }
+                if (ls.s.prev == ls.s.next) {
+                    self.head_listen_sockets = null;
+                } else {
+                    if (ls.s.prev) |prev| {
+                        prev.next = ls.s.next;
+                    } else {
+                        self.head_listen_sockets = @ptrCast(@alignCast(ls.s.next));
+                    }
+                    if (ls.s.next) |next| next.prev = ls.s.prev;
+                }
+            }
+
+            pub fn adoptSocket(self: *Self, allocator: Allocator, s: *Socket) !*Socket {
+                if (s.isClosed()) return s;
+                if (s.low_prio_state != .queued) {
+                    s.context.unlinkSocket(s);
+                }
+
+                const new_s: *Socket = @ptrCast(@alignCast(try s.p.resize(allocator, s.context.loop, PollT(Socket, Loop))));
+                new_s.timeout = 255;
+                new_s.long_timeout = 255;
+                if (new_s.low_prio_state == .queued) {
+                    if (new_s.prev) |prev| {
+                        prev.next = new_s;
+                    } else {
+                        new_s.context.loop.data.low_priority_head = new_s;
+                    }
+                    if (new_s.next) |next| next.prev = new_s;
+                } else {
+                    self.linkSocket(new_s);
+                }
+                return new_s;
             }
         };
     }

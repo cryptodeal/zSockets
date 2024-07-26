@@ -116,6 +116,36 @@ pub fn closeSocket(fd: SocketDescriptor) !void {
     };
 }
 
+pub fn createConnectSocket(host: ?[:0]const u8, port: u64, src_host: ?[:0]const u8, _: u64) !SocketDescriptor {
+    const hints: std.c.addrinfo = std.mem.zeroInit(std.c.addrinfo, .{
+        .family = std.c.AF.UNSPEC,
+        .socktype = std.c.SOCK.STREAM,
+    });
+    var result: ?*std.c.addrinfo = null;
+    defer if (result) |r| std.c.freeaddrinfo(r);
+    var buf: [16]u8 = undefined;
+    const port_string: [:0]u8 = try std.fmt.bufPrintZ(&buf, "{d}", .{port});
+    if (@intFromEnum(std.c.getaddrinfo(if (host) |h| h.ptr else null, port_string.ptr, &hints, &result)) != 0) {
+        return error.SocketError;
+    }
+    const fd: SocketDescriptor = createSocket(@intCast(result.?.family), @intCast(result.?.socktype), @intCast(result.?.protocol));
+    if (fd == SOCKET_ERROR) return SOCKET_ERROR;
+    if (src_host) |h| {
+        var interface_result: ?*std.c.addrinfo = null;
+        defer if (interface_result) |r| std.c.freeaddrinfo(r);
+        if (@intFromEnum(std.c.getaddrinfo(h.ptr, null, null, &interface_result)) != 0) {
+            return error.SocketError;
+        }
+        const ret = std.c.bind(fd, interface_result.?.addr.?, interface_result.?.addrlen);
+        if (ret == SOCKET_ERROR) {
+            try closeSocket(fd);
+            return SOCKET_ERROR;
+        }
+    }
+    _ = std.c.connect(fd, result.?.addr.?, result.?.addrlen);
+    return fd;
+}
+
 pub fn createListenSocket(host: ?[:0]const u8, port: u64, options: u64) !SocketDescriptor {
     const hints: std.c.addrinfo = std.mem.zeroInit(std.c.addrinfo, .{
         .flags = std.c.AI.PASSIVE,

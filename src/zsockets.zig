@@ -1,3 +1,5 @@
+const loop = @import("loop.zig");
+
 pub usingnamespace @import("internal.zig");
 
 pub const Extensions = struct {
@@ -7,6 +9,9 @@ pub const Extensions = struct {
     poll: type = void,
     timer: type = void,
 };
+
+pub const wakeupLoop = loop.wakeupLoop;
+pub const internalLoopDataFree = loop.internalLoopDataFree;
 
 pub fn Network(ssl: bool, comptime extensions: Extensions) type {
     return struct {

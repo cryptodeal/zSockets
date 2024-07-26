@@ -60,6 +60,26 @@ fn internalHandleLowPrioritySockets(loop: anytype) !void {
     }
 }
 
+pub fn internalLoopDataFree(allocator: Allocator, loop: anytype) !void {
+    const LoopT = @TypeOf(loop.*);
+    if (build_opts.ssl_lib != .nossl) {
+        // TODO: free ssl data
+    }
+    allocator.free(loop.data.recv_buf);
+    try LoopT.destroyTimer(allocator, loop.data.sweep_timer.?);
+    try LoopT.internalCloseAsync(allocator, loop.data.wakeup_async.?);
+}
+
+pub fn internalLoopUnlink(loop: anytype, context: anytype) void {
+    if (loop.data.head == context) {
+        loop.data.head = context.next;
+        if (loop.data.head) |h| h.prev = null;
+    } else {
+        context.prev.?.next = context.next;
+        if (context.next) |n| n.prev = context.prev;
+    }
+}
+
 pub fn internalTimerSweep(allocator: Allocator, loop: anytype) !void {
     const loop_data = &loop.data;
     loop_data.iterator = loop_data.head;
@@ -116,7 +136,7 @@ pub fn internalTimerSweep(allocator: Allocator, loop: anytype) !void {
 pub fn internalDispatchReadyPoll(allocator: Allocator, comptime CallbackType: type, comptime SocketType: type, p: anytype, err: u32, events_: u32) !void {
     const PollT = @TypeOf(p.*);
     const LoopT = PollT.LoopT;
-    // std.debug.print("PollType: {d}\n", .{@intFromEnum(p.pollType())});
+    std.debug.print("PollType: {d}\n", .{@intFromEnum(p.pollType())});
     switch (p.pollType()) {
         .callback => {
             const cb: *CallbackType = @ptrCast(@alignCast(p));
@@ -135,7 +155,7 @@ pub fn internalDispatchReadyPoll(allocator: Allocator, comptime CallbackType: ty
                 // it's possible we arrive  here with an error
                 if (err != 0) {
                     // Emit error, close but don't emit `on_close`
-                    _ = try s.context.on_connect_error.?(s, 0);
+                    _ = try s.context.on_connect_error.?(allocator, s, 0);
                     _ = try s.closeConnecting();
                 } else {
                     // all sockets poll for readable
@@ -303,4 +323,8 @@ fn internalFreeClosedSockets(allocator: Allocator, loop: anytype) void {
 pub fn internalLoopPost(allocator: Allocator, loop: anytype) !void {
     internalFreeClosedSockets(allocator, loop);
     try loop.data.post_cb(allocator, loop);
+}
+
+pub fn wakeupLoop(loop: anytype) !void {
+    return loop.asyncWakeup();
 }

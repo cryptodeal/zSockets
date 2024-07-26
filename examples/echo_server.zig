@@ -1,7 +1,5 @@
 const std = @import("std");
-const zsockets = @import("zSockets");
-
-const zs = zsockets.Network(false, .{ .socket = EchoSocket });
+const zs = @import("zSockets").Network(false, .{ .socket = EchoSocket });
 
 const Allocator = std.mem.Allocator;
 
@@ -92,9 +90,6 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     const loop = try zs.Loop.init(allocator, null, &onWakeup, &onPre, &onPost);
     // TODO(cryptodeal): implement `Loop.deinit()` method
-
-    const options: zsockets.SocketCtxOpts = .{};
-    _ = options; // autofix
 
     const echo_context = try zs.SocketCtx.init(allocator, loop);
     // TODO(cryptodeal): implement `SocketCtx.deinit()` method

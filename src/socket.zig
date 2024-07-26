@@ -216,7 +216,7 @@ pub fn Socket(comptime ssl: bool, comptime SocketExt: type, comptime SocketCtxEx
             ext: ?SocketExt,
 
             pub fn isClosed(self: *Self) bool {
-                return self.prev == @as(*Self, @ptrCast(@alignCast(self.context)));
+                return @intFromPtr(self.prev) == @intFromPtr(self.context);
             }
 
             pub fn isShutdown(self: *Self) bool {
@@ -309,6 +309,10 @@ pub fn Socket(comptime ssl: bool, comptime SocketExt: type, comptime SocketCtxEx
                     0 => 255,
                     else => @intCast((self.context.timestamp + ((seconds + 3) >> 2)) % 240),
                 };
+            }
+
+            pub fn isEstablished(self: *Self) bool {
+                return @as(*Poll, @ptrCast(@alignCast(self))).pollType() != .semi_socket;
             }
         };
     }

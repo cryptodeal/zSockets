@@ -150,7 +150,7 @@ pub fn build(b: *std.Build) !void {
     hammer_test_exe.linkLibC();
     hammer_test_exe.root_module.addImport("zSockets", &lib.root_module);
 
-    const run_hammer_test = b.addRunArtifact(echo_server_exe);
+    const run_hammer_test = b.addRunArtifact(hammer_test_exe);
 
     const run_hammer_test_step = b.step("run_hammer_test", "Hammer test the echo server ");
     run_hammer_test_step.dependOn(&run_hammer_test.step);

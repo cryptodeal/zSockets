@@ -230,6 +230,12 @@ pub fn Loop(comptime ssl: bool, comptime extensions: Extensions) type {
                 return res;
             }
 
+            pub fn deinit(self: *Self, allocator: Allocator) void {
+                loop_.internalLoopDataFree(allocator, self) catch unreachable;
+                _ = std.c.close(self.fd);
+                allocator.destroy(self);
+            }
+
             fn internalLoopDataInit(
                 self: *Self,
                 allocator: Allocator,
@@ -278,6 +284,21 @@ pub fn Loop(comptime ssl: bool, comptime extensions: Extensions) type {
                 return @ptrCast(@alignCast(cb));
             }
 
+            pub fn destroyTimer(allocator: Allocator, timer: *Timer) !void {
+                const internal_cb: *InternalCallback(Poll, Self) = @ptrCast(@alignCast(timer));
+                // add a triggered oneshot event
+                const kevent: std.posix.Kevent = .{
+                    .ident = @intFromPtr(internal_cb),
+                    .filter = std.c.EVFILT_TIMER,
+                    .flags = std.c.EV_DELETE,
+                    .fflags = 0,
+                    .data = 0,
+                    .udata = @intFromPtr(internal_cb),
+                };
+                _ = try std.posix.kevent(internal_cb.loop.fd, &.{kevent}, &.{}, null);
+                @as(*Poll, @ptrCast(@alignCast(timer))).deinit(allocator, internal_cb.loop);
+            }
+
             fn internalCreateAsync(self: *Self, allocator: Allocator, fallthrough: bool) !*InternalAsync {
                 const cb = try allocator.create(InternalCallback(Poll, Self));
                 cb.loop = self;
@@ -290,6 +311,21 @@ pub fn Loop(comptime ssl: bool, comptime extensions: Extensions) type {
                     self.num_polls += 1;
                 }
                 return @ptrCast(@alignCast(cb));
+            }
+
+            pub fn internalCloseAsync(allocator: Allocator, a: *InternalAsync) !void {
+                const internal_cb: *InternalCallback(Poll, Self) = @ptrCast(@alignCast(a));
+                // add a triggered oneshot event
+                const kevent: std.posix.Kevent = .{
+                    .ident = @intFromPtr(internal_cb),
+                    .filter = std.c.EVFILT_TIMER,
+                    .flags = std.c.EV_DELETE,
+                    .fflags = 0,
+                    .data = 0,
+                    .udata = @intFromPtr(internal_cb),
+                };
+                _ = try std.posix.kevent(internal_cb.loop.fd, &.{kevent}, &.{}, null);
+                @as(*Poll, @ptrCast(@alignCast(a))).deinit(allocator, internal_cb.loop);
             }
 
             inline fn getReadyPoll(loop: *Self, index: anytype) ?*Poll {
@@ -362,13 +398,27 @@ pub fn Loop(comptime ssl: bool, comptime extensions: Extensions) type {
                             const err: u32 = self.ready_polls[self.current_ready_poll].flags & (std.c.EV_ERROR | std.c.EV_EOF);
                             events &= poll.events();
                             if (events != 0 or err != 0) {
-                                // std.debug.print("events: {d}, err: {d}\n", .{ events, err });
+                                std.debug.print("events: {d}, err: {d}\n", .{ events, err });
                                 try internalDispatchReadyPoll(allocator, InternalCallback(Poll, Self), Socket, poll, err, events);
                             }
                         }
                     }
                     try internalLoopPost(allocator, self);
                 }
+            }
+
+            pub fn asyncWakeup(self: *Self) !void {
+                const internal_cb: *InternalCallback(Poll, Self) = @ptrCast(@alignCast(self.data.wakeup_async));
+                // add a triggered oneshot event
+                const kevent: std.posix.Kevent = .{
+                    .ident = @intFromPtr(internal_cb),
+                    .filter = std.c.EVFILT_USER,
+                    .flags = std.c.EV_ADD | std.c.EV_ONESHOT,
+                    .fflags = std.c.NOTE_TRIGGER,
+                    .data = 0,
+                    .udata = @intFromPtr(internal_cb),
+                };
+                _ = try std.posix.kevent(internal_cb.loop.fd, &.{kevent}, &.{}, null);
             }
         },
     }
@@ -541,6 +591,29 @@ pub fn PollT(comptime PollExt: type, comptime LoopType: type) type {
 
             pub fn setPollType(self: *Self, poll_type: PollType) void {
                 self.state.poll_type = @enumFromInt(@intFromEnum(poll_type) | (@intFromEnum(self.state.poll_type) & 12));
+            }
+
+            pub fn resize(self: *Self, allocator: Allocator, loop: *LoopT, comptime T: type) !*T {
+                if (T == Self) return self;
+                const events_ = self.events();
+                var new_self: *T = @ptrCast(@alignCast(self));
+                if (!allocator.resize(std.mem.asBytes(self), @sizeOf(T))) {
+                    new_self = try allocator.create(T);
+                    if (@sizeOf(Self) == @sizeOf(T)) {
+                        @memcpy(std.mem.asBytes(new_self), std.mem.asBytes(self));
+                    } else if (@sizeOf(Self) < @sizeOf(T)) {
+                        @memcpy(std.mem.asBytes(new_self)[0..@sizeOf(Self)], std.mem.asBytes(self));
+                    } else {
+                        @memcpy(std.mem.asBytes(new_self), std.mem.asBytes(self)[0..@sizeOf(T)]);
+                    }
+                }
+                if (@intFromPtr(self) != @intFromPtr(new_self) and events_ != 0) {
+                    defer allocator.destroy(self);
+                    // unable to resize existing allocation, copied to new allocation
+                    _ = try kqueueChange(loop.fd, new_self.state.fd, 0, events_, @ptrCast(@alignCast(new_self)));
+                    loop.updatePendingReadyPolls(self, @ptrCast(@alignCast(new_self)), events_, events_);
+                }
+                return new_self;
             }
         },
     };

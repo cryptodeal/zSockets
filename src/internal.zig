@@ -5,6 +5,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 pub const InternalAsync = anyopaque;
+pub const Socket = @import("internal/socket.zig");
 pub const SocketDescriptor = std.posix.socket_t;
 
 pub const Timer = switch (build_opts.event_loop_lib) {
