@@ -83,7 +83,7 @@ fn onEchoSocketOpen(_: Allocator, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
 }
 
 // Socket timeout handler
-fn onEchoSocketimeout(allocator: Allocator, s: *zs.Socket) !*zs.Socket {
+fn onEchoSocketTimeout(allocator: Allocator, s: *zs.Socket) !*zs.Socket {
     std.log.info("Client timed out\n", .{});
     return s.close(allocator, 0, null);
 }
@@ -103,11 +103,10 @@ pub fn main() !void {
     echo_context.setOnData(&onEchoSocketData);
     echo_context.setOnWritable(&onEchoSocketWritable);
     echo_context.setOnClose(&onEchoSocketClose);
-    echo_context.setOnTimeout(&onEchoSocketimeout);
+    echo_context.setOnTimeout(&onEchoSocketTimeout);
     echo_context.setOnEnd(&onEchoSocketEnd);
 
     _ = try echo_context.listen(allocator, EchoSocket, null, 3000, 0);
-    // TODO(cryptodeal): implement `ListenSocket.deinit()` method
     std.debug.print("Listening on port 3000...\n", .{});
     try loop.run(allocator);
 }

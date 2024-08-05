@@ -14,11 +14,12 @@ _ext: zs.Extension = .{},
 
 pub fn init(allocator: Allocator, comptime Extension: ?type) !*Self {
     const self = try allocator.create(Self);
-    if (Extension) |T| self._ext = try zs.Extension.init(allocator, T);
+    self._ext = if (Extension) |T| try zs.Extension.init(allocator, T) else .{};
     return self;
 }
 
-pub fn deinit(self: *Self, allocator: Allocator) void {
+pub fn deinit(self: *Self, allocator: Allocator, loop: *zs.Loop) void {
+    loop.num_polls -|= 1;
     self._ext.deinit(allocator);
     allocator.destroy(self);
 }

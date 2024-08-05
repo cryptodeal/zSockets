@@ -79,12 +79,12 @@ pub const Extension = struct {
         const buffer = try allocator.alloc(u8, @sizeOf(T));
         return .{
             .ptr = buffer.ptr,
-            .ptr_len = buffer.len,
+            .ptr_len = @sizeOf(T),
         };
     }
 
     pub fn deinit(self: *Extension, allocator: Allocator) void {
-        if (self.ptr) |p| allocator.free(@as([*]u8, @ptrCast(@alignCast(p)))[0..self.ptr_len]);
+        if (self.ptr != null and self.ptr_len != 0) allocator.free(@as([*]u8, @ptrCast(@alignCast(self.ptr)))[0..self.ptr_len]);
         self.ptr = null;
         self.ptr_len = 0;
         self.free_cb = null;

@@ -90,6 +90,13 @@ pub const Context = struct {
         self.on_socket_timeout = on_timeout;
     }
 
+    pub fn setOnLongTimeout(
+        self: *Context,
+        on_long_timeout: *const fn (allocator: Allocator, s: *zs.Socket) anyerror!*zs.Socket,
+    ) void {
+        self.on_socket_long_timeout = on_long_timeout;
+    }
+
     pub fn setOnEnd(
         self: *Context,
         on_end: *const fn (allocator: Allocator, s: *zs.Socket) anyerror!*zs.Socket,
@@ -141,7 +148,7 @@ pub const Context = struct {
         if (connect_socket_fd == zs.SOCKET_ERROR) return error.ConnectFailed;
         const connect_socket = try allocator.create(zs.Socket);
         errdefer allocator.destroy(connect_socket);
-        if (T) |Ext| connect_socket._ext = try zs.Extension.init(allocator, Ext);
+        connect_socket._ext = if (T) |Ext| try zs.Extension.init(allocator, Ext) else .{};
         connect_socket.p = zs.Poll.init(self.loop, false, connect_socket_fd, .semi_socket);
         try connect_socket.p.start(self.loop, zs.SOCKET_WRITABLE);
         connect_socket.context = self;
@@ -155,7 +162,7 @@ pub const Context = struct {
     pub fn listen(self: *Context, allocator: Allocator, comptime T: ?type, host: ?[:0]const u8, port: u64, options: u64) !*zs.ListenSocket {
         const listen_socket_fd = try bsd.createListenSocket(host, port, options);
         const ls = try allocator.create(zs.ListenSocket);
-        if (T) |Ext| ls.s._ext = try zs.Extension.init(allocator, Ext);
+        ls.s._ext = if (T) |Ext| try zs.Extension.init(allocator, Ext) else .{};
         ls.s.p = zs.Poll.init(self.loop, false, listen_socket_fd, .semi_socket);
         try ls.s.p.start(self.loop, zs.SOCKET_READABLE);
         ls.s.context = self;

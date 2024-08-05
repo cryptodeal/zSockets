@@ -28,7 +28,7 @@ pub const Kqueue = packed struct {
     }
 
     pub fn deinit(_: *Kqueue, loop: *zs.Loop) void {
-        loop.num_polls -= 1;
+        loop.num_polls -|= 1;
     }
 
     pub fn events(self: *const Kqueue) u32 {
