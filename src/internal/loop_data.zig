@@ -1,17 +1,18 @@
-// TODO: avoid relying on c types
-pub const InternalLoopData = struct {
-    // struct us_timer_t *sweep_timer;
-    // struct us_internal_async *wakeup_async;
-    last_write_failed: c_int,
-    // struct us_socket_context_t *head;
-    // struct us_socket_context_t *iterator;
-    recv_buf: []u8,
-    ssl_data: ?*anyopaque,
-    // void (*pre_cb)(struct us_loop_t *);
-    // void (*post_cb)(struct us_loop_t *);
-    // struct us_socket_t *closed_head;
-    // struct us_socket_t *low_prio_head;
-    low_prio_budget: c_int,
-    //  We do not care if this flips or not, it doesn't matter
-    iteration_nr: c_longlong,
-};
+const std = @import("std");
+const zs = @import("../zsockets.zig");
+
+const Allocator = std.mem.Allocator;
+
+sweep_timer: *zs.Timer,
+wakeup_async: *zs.InternalAsync,
+last_write_failed: bool,
+head: ?*zs.Context,
+iterator: ?*zs.Context,
+recv_buf: []u8 = &[_]u8{},
+ssl_data: ?*anyopaque,
+pre_cb: *const fn (allocator: Allocator, loop: *zs.Loop) anyerror!void,
+post_cb: *const fn (allocator: Allocator, loop: *zs.Loop) anyerror!void,
+closed_head: ?*zs.Socket,
+low_priority_head: ?*zs.Socket,
+low_priority_budget: i32,
+iteration_nr: i64,

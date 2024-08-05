@@ -1,5 +1,5 @@
 const std = @import("std");
-const utils = @import("src/utils.zig");
+const utils = @import("src/internal.zig");
 
 const EventLoopT = utils.EventLoopT;
 const SslT = utils.SslT;
@@ -76,6 +76,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
     lib.linkLibC();
+    lib.addIncludePath(b.path("include"));
     linkSsl(lib, ssl_type, ssl_deps);
 
     if (event_type == .asio) {
@@ -132,12 +133,27 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
+    echo_server_exe.linkLibC();
     echo_server_exe.root_module.addImport("zSockets", &lib.root_module);
 
-    const run_echo_server_exe = b.addRunArtifact(echo_server_exe);
+    const run_echo_server = b.addRunArtifact(echo_server_exe);
 
     const run_echo_server_step = b.step("run_echo_server", "Run the echo server demo");
-    run_echo_server_step.dependOn(&run_echo_server_exe.step);
+    run_echo_server_step.dependOn(&run_echo_server.step);
+
+    const hammer_test_exe = b.addExecutable(.{
+        .name = "hammer_test",
+        .root_source_file = b.path("examples/hammer_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    hammer_test_exe.linkLibC();
+    hammer_test_exe.root_module.addImport("zSockets", &lib.root_module);
+
+    const run_hammer_test = b.addRunArtifact(hammer_test_exe);
+
+    const run_hammer_test_step = b.step("run_hammer_test", "Hammer test the echo server ");
+    run_hammer_test_step.dependOn(&run_hammer_test.step);
 }
 
 const SslOpts = struct {

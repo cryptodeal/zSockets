@@ -27,6 +27,8 @@ zig build test -DUSE_BORINGSSL -DUSE_QUIC
 
 ## Status
 
+While the library and internal logic was originally based on `uSockets`, the user-facing APIs will vary significantly from `uSockets` in order to better align with Zig's philosophy. The library is currently in the VERY early stages of development, is un-tested, and should not yet be used in production.
+
 ### Setup Dependencies
 
 #### SSL/Crypto
