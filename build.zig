@@ -127,6 +127,7 @@ pub fn build(b: *std.Build) !void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);
 
+    // examples/echo_server.zig
     const echo_server_exe = b.addExecutable(.{
         .name = "echo_server",
         .root_source_file = b.path("examples/echo_server.zig"),
@@ -138,9 +139,10 @@ pub fn build(b: *std.Build) !void {
 
     const run_echo_server = b.addRunArtifact(echo_server_exe);
 
-    const run_echo_server_step = b.step("run_echo_server", "Run the echo server demo");
+    const run_echo_server_step = b.step("echo_server", "Run the echo server demo");
     run_echo_server_step.dependOn(&run_echo_server.step);
 
+    // examples/hammer_test.zig
     const hammer_test_exe = b.addExecutable(.{
         .name = "hammer_test",
         .root_source_file = b.path("examples/hammer_test.zig"),
@@ -152,8 +154,44 @@ pub fn build(b: *std.Build) !void {
 
     const run_hammer_test = b.addRunArtifact(hammer_test_exe);
 
-    const run_hammer_test_step = b.step("run_hammer_test", "Hammer test the echo server ");
+    const run_hammer_test_step = b.step("hammer_test", "Hammer test the echo server");
     run_hammer_test_step.dependOn(&run_hammer_test.step);
+
+    // examples/http_load_test.zig
+    const http_load_test_exe = b.addExecutable(.{
+        .name = "http_load_test",
+        .root_source_file = b.path("examples/http_load_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    http_load_test_exe.linkLibC();
+    http_load_test_exe.root_module.addImport("zSockets", &lib.root_module);
+
+    const run_http_load_test = b.addRunArtifact(http_load_test_exe);
+    if (b.args) |args| {
+        run_http_load_test.addArgs(args);
+    }
+
+    const run_http_load_test_step = b.step("http_load_test", "Run the http load test demo");
+    run_http_load_test_step.dependOn(&run_http_load_test.step);
+
+    // examples/tcp_load_test.zig
+    const tcp_load_test_exe = b.addExecutable(.{
+        .name = "tcp_load_test",
+        .root_source_file = b.path("examples/tcp_load_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tcp_load_test_exe.linkLibC();
+    tcp_load_test_exe.root_module.addImport("zSockets", &lib.root_module);
+
+    const run_tcp_load_test = b.addRunArtifact(tcp_load_test_exe);
+    if (b.args) |args| {
+        run_tcp_load_test.addArgs(args);
+    }
+
+    const run_tcp_load_test_step = b.step("tcp_load_test", "Run the tcp load test demo");
+    run_tcp_load_test_step.dependOn(&run_tcp_load_test.step);
 }
 
 const SslOpts = struct {

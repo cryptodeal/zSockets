@@ -145,7 +145,6 @@ pub fn createListenSocket(host: ?[:0]const u8, port: u64, options: u64) !zs.Sock
     a = result;
     while (a != null and listen_fd == zs.SOCKET_ERROR) : (a = a.?.next) {
         if (a.?.family == std.c.AF.INET) {
-            // TODO: finish implementing
             listen_fd = createSocket(@intCast(a.?.family), @intCast(a.?.socktype), @intCast(a.?.protocol));
             listen_addr = a;
         }

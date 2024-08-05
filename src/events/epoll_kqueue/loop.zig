@@ -16,7 +16,7 @@ pub const Loop = switch (build_opts.event_loop_lib) {
 };
 
 const Kqueue = struct {
-    data: LoopData,
+    data: LoopData = undefined,
     num_polls: u64 = 0,
     num_ready_polls: u64 = 0,
     current_ready_poll: u64 = 0,
@@ -34,29 +34,31 @@ const Kqueue = struct {
     ) !*Kqueue {
         const loop = try allocator.create(Kqueue);
         errdefer allocator.destroy(loop);
+        loop.* = .{ .fd = std.c.kqueue() };
         if (Extension) |T| loop._ext = try zs.Extension.init(allocator, T);
-        loop.fd = std.c.kqueue();
         try utils.initLoopData(allocator, loop, wakeup_cb, pre_cb, post_cb);
         return loop;
     }
 
     pub fn deinit(self: *Kqueue, allocator: Allocator) void {
+        utils.internalLoopDataFree(allocator, self);
         self._ext.deinit(allocator);
-        // TODO(cryptodeal): finish implementation
+        _ = std.c.close(self.fd);
+        allocator.destroy(self);
     }
 
     pub fn run(self: *Kqueue, allocator: Allocator) !void {
         try utils.loopIntegrate(self);
 
         while (self.num_polls != 0) {
+            // std.debug.print("num_polls: {d}\n", .{self.num_polls});
             // emit pre-callback
             try utils.internalLoopPre(allocator, self);
 
-            self.num_ready_polls = @intCast(std.c.kevent(self.fd, &[_]Kevent{}, 0, &self.ready_polls, self.ready_polls.len, null));
+            self.num_ready_polls = @intCast(std.c.kevent(self.fd, &[_]Kevent{}, 0, &self.ready_polls, 1024, null));
             self.current_ready_poll = 0;
             while (self.current_ready_poll < self.num_ready_polls) : (self.current_ready_poll += 1) {
-                const poll = self.getReadyPoll(self.current_ready_poll);
-                if (poll) |p| {
+                if (self.getReadyPoll(self.current_ready_poll)) |p| {
                     var events: u32 = zs.SOCKET_READABLE;
                     if (self.ready_polls[self.current_ready_poll].filter == std.c.EVFILT_WRITE) {
                         events = zs.SOCKET_WRITABLE;
@@ -108,6 +110,20 @@ const Kqueue = struct {
         return @ptrCast(@alignCast(cb));
     }
 
+    pub fn closeTimer(allocator: Allocator, timer: *zs.Timer) void {
+        const internal_cb: *Callback = @ptrCast(@alignCast(timer));
+        defer internal_cb.deinit(allocator, internal_cb.loop);
+        const event: std.c.Kevent = .{
+            .ident = @intFromPtr(internal_cb),
+            .filter = std.c.EVFILT_TIMER,
+            .flags = std.c.EV_DELETE,
+            .fflags = 0,
+            .data = 0,
+            .udata = @intFromPtr(internal_cb),
+        };
+        _ = std.c.kevent(internal_cb.loop.fd, &[_]Kevent{event}, 1, &[_]Kevent{}, 0, null);
+    }
+
     fn asyncWakeup(
         a: *zs.InternalAsync,
     ) void {
@@ -157,5 +173,19 @@ const Kqueue = struct {
     pub fn asyncSet(a: *zs.InternalAsync, cb: *const fn (allocator: Allocator, a: *zs.InternalAsync) anyerror!void) void {
         const internal_cb: *Callback = @ptrCast(@alignCast(a));
         internal_cb.cb = @ptrCast(@alignCast(cb));
+    }
+
+    pub fn closeAsync(allocator: Allocator, a: *zs.InternalAsync) void {
+        const internal_cb: *Callback = @ptrCast(@alignCast(a));
+        defer internal_cb.deinit(allocator, internal_cb.loop);
+        const event: std.c.Kevent = .{
+            .ident = @intFromPtr(internal_cb),
+            .filter = std.c.EVFILT_USER,
+            .flags = std.c.EV_DELETE,
+            .fflags = 0,
+            .data = 0,
+            .udata = @intFromPtr(internal_cb),
+        };
+        _ = std.c.kevent(internal_cb.loop.fd, &[_]Kevent{event}, 1, &[_]Kevent{}, 0, null);
     }
 };

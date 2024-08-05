@@ -57,6 +57,13 @@ pub const Socket = struct {
         };
     }
 
+    pub fn setLongTimeout(self: *Socket, minutes: u32) void {
+        self.long_timeout = switch (minutes) {
+            0 => 255,
+            else => @intCast((self.context.long_timestamp + minutes) % 240),
+        };
+    }
+
     pub fn close(self: *Socket, allocator: Allocator, code: i32, reason: ?*anyopaque) !*Socket {
         if (!self.isClosed()) {
             switch (self.low_priority_state) {

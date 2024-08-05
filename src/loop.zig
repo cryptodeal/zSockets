@@ -8,6 +8,13 @@ const Callback = @import("internal/callback.zig");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
+pub fn internalLoopDataFree(allocator: Allocator, loop: *zs.Loop) void {
+    // TODO(cryptodeal): if using ssl, free ssl data
+    allocator.free(loop.data.recv_buf);
+    zs.Loop.closeTimer(allocator, loop.data.sweep_timer);
+    zs.Loop.closeAsync(allocator, loop.data.wakeup_async);
+}
+
 pub fn initLoopData(
     allocator: Allocator,
     loop: *zs.Loop,
@@ -298,7 +305,7 @@ pub fn adoptAcceptedSocket(
 ) !*zs.Socket {
     const s = try allocator.create(zs.Socket);
     errdefer allocator.destroy(s);
-    if (ext.ptr) |_| s._ext = try ext.dupeEmpty(allocator);
+    s._ext = if (ext.ptr) |_| try ext.dupeEmpty(allocator) else .{};
     s.p = zs.Poll.init(context.loop, false, accepted_fd, .socket);
     try s.p.start(context.loop, zs.SOCKET_READABLE);
     s.context = context;
