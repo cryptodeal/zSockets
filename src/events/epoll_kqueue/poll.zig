@@ -83,9 +83,9 @@ pub const Kqueue = packed struct {
 
     pub fn resizeUpdate(self: *Kqueue, loop: *zs.Loop) !void {
         const evnts = self.events();
-        // if (evnts != 0) {
-        _ = try utils.kqueueChange(loop.fd, self.state.fd, 0, evnts, self);
-        loop.updatePendingReadyPolls(self, self, evnts, evnts);
-        // }
+        if (evnts != 0) {
+            _ = try utils.kqueueChange(loop.fd, self.state.fd, 0, evnts, self);
+            loop.updatePendingReadyPolls(self, self, evnts, evnts);
+        }
     }
 };

@@ -117,11 +117,13 @@ pub const Socket = struct {
     }
 
     pub fn resize(self: *Socket, allocator: Allocator, loop: *zs.Loop, comptime T: ?type) !void {
-        var old_ext = self._ext;
-        defer old_ext.deinit(allocator);
         if (T) |Ext| {
-            self._ext = try zs.Extension.init(allocator, Ext);
-            old_ext.copyTo(&self._ext);
+            if (@sizeOf(Ext) != self._ext.ptr_len) {
+                var old_ext = self._ext;
+                defer old_ext.deinit(allocator);
+                self._ext = try zs.Extension.init(allocator, Ext);
+                old_ext.copyTo(&self._ext);
+            }
         }
         try self.p.resizeUpdate(loop);
     }

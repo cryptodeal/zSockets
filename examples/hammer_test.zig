@@ -10,7 +10,7 @@ var last_val: i64 = -1;
 fn printProgress(percentage: f64) void {
     const val: i64 = @intFromFloat(percentage * 100);
     if (last_val != -1 and val == last_val) {
-        std.debug.print("progress: {d}\n", .{percentage});
+        std.debug.print("progress: {d} - {d} open connections\n\t(opened clients: {d}, closed clients: {d}, opened_servers: {d}, closed servers: {d})\n", .{ percentage, opened_connections - closed_connections, opened_clients, closed_clients, opened_servers, closed_servers });
         return;
     }
     last_val = val;
@@ -90,29 +90,13 @@ const HttpCtx = extern struct {
     content: [1]u8,
 };
 
-var prng: ?std.Random.Xoshiro256 = null;
-var rand_: std.Random = undefined;
-
-fn getRng() std.Random {
-    if (prng == null) {
-        prng = std.Random.DefaultPrng.init(blk: {
-            var seed: u64 = undefined;
-            std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
-            break :blk seed;
-        });
-        rand_ = prng.?.random();
-    }
-    return rand_;
-}
-
 fn performRandomOp(allocator: Allocator, s_: *zs.Socket) !*zs.Socket {
     var s = s_;
-    const rand = getRng();
-    switch (rand.uintAtMost(usize, 2147483647) % 5) {
+    switch (zs.c.rand() % 5) {
         0 => return s.close(allocator, 0, null),
         1 => {
             if (!s.isClosed()) {
-                if ((rand.uintAtMost(usize, 2147483647) % 2) != 0) {
+                if ((zs.c.rand() % 2) != 0) {
                     s = try websocket_context.adoptSocket(allocator, s, WebSocket);
                     const ws = s.ext(WebSocket).?;
                     ws.is_http = false;
@@ -128,7 +112,7 @@ fn performRandomOp(allocator: Allocator, s_: *zs.Socket) !*zs.Socket {
             // write - causes the other end to receive the data (event) and possibly us
             // to receive on writable event - could it be that we get stuck if the other end is closed?
             // no because, if we do not get ack in time we will timeout after some time
-            _ = try s.write(long_buffer[0 .. rand.uintAtMost(usize, 2147483647) % long_length], false);
+            _ = try s.write(long_buffer[0 .. zs.c.rand() % long_length], false);
         },
         3 => {
             // shutdown (on macOS we can get stuck in fin_wait_2 for some weird reason!)
@@ -323,9 +307,8 @@ fn onHttpSocketTimeout(allocator: Allocator, s: *zs.Socket) !*zs.Socket {
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    zs.c.srand(@intCast(std.time.timestamp()));
+    const allocator = std.heap.c_allocator;
 
     long_buffer = try allocator.alloc(u8, long_length * 1);
     defer allocator.free(long_buffer);
@@ -346,13 +329,13 @@ pub fn main() !void {
     websocket_context = try http_context.initChildContext(allocator, HttpCtx);
     defer websocket_context.deinit(allocator);
 
-    websocket_context.setOnOpen(@ptrCast(&onWebSocketOpen));
-    websocket_context.setOnData(@ptrCast(&onWebSocketData));
-    websocket_context.setOnWritable(@ptrCast(&onWebSocketWritable));
-    websocket_context.setOnClose(@ptrCast(&onWebSocketClose));
-    websocket_context.setOnTimeout(@ptrCast(&onWebSocketTimeout));
-    websocket_context.setOnEnd(@ptrCast(&onWebSocketEnd));
-    websocket_context.setOnConnectError(@ptrCast(&onWebSocketConnectErr));
+    websocket_context.setOnOpen(&onWebSocketOpen);
+    websocket_context.setOnData(&onWebSocketData);
+    websocket_context.setOnWritable(&onWebSocketWritable);
+    websocket_context.setOnClose(&onWebSocketClose);
+    websocket_context.setOnTimeout(&onWebSocketTimeout);
+    websocket_context.setOnEnd(&onWebSocketEnd);
+    websocket_context.setOnConnectError(&onWebSocketConnectErr);
 
     listen_socket = try http_context.listen(allocator, HttpSocket, null, 3000, 0);
     defer listen_socket.close() catch unreachable;

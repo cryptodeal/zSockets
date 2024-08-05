@@ -14,7 +14,7 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #endif
-
+#include <stdlib.h> 
 
 struct bsd_addr_t {
     struct sockaddr_storage mem;
@@ -23,3 +23,8 @@ struct bsd_addr_t {
     int ip_length;
     int port;
 };
+
+extern uintptr_t zigRand() {
+    return (uintptr_t)rand();
+}
+

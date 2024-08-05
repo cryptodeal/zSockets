@@ -63,7 +63,7 @@ const Kqueue = struct {
                     }
                     const err: u32 = self.ready_polls[self.current_ready_poll].flags & (std.c.EV_ERROR | std.c.EV_EOF);
                     events &= p.events();
-                    std.debug.print("events: {d}, err: {d}\n", .{ events, err });
+                    //std.debug.print("events: {d}, err: {d}\n", .{ events, err });
                     if (events != 0 or err != 0) {
                         try utils.internalDispatchReadyPoll(allocator, p, err, events);
                     }
