@@ -5,7 +5,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 pub const InternalAsync = anyopaque;
-pub const Socket = @import("internal/socket.zig");
 pub const SocketDescriptor = std.posix.socket_t;
 
 pub const Timer = switch (build_opts.event_loop_lib) {
@@ -46,12 +45,12 @@ pub const RECV_BUFFER_PADDING = 32;
 pub const EXT_ALIGNMENT = 16;
 
 pub const SOCKET_READABLE = switch (build_opts.event_loop_lib) {
-    .epoll, .kqueue => @import("events/epoll_kqueue.zig").SOCKET_READABLE,
+    .epoll, .kqueue => @import("events/epoll_kqueue/constants.zig").SOCKET_READABLE,
     else => |v| @compileError("Unsupported event loop library " ++ @tagName(v)),
 };
 
 pub const SOCKET_WRITABLE = switch (build_opts.event_loop_lib) {
-    .epoll, .kqueue => @import("events/epoll_kqueue.zig").SOCKET_WRITABLE,
+    .epoll, .kqueue => @import("events/epoll_kqueue/constants.zig").SOCKET_WRITABLE,
     else => |v| @compileError("Unsupported event loop library " ++ @tagName(v)),
 };
 
@@ -68,6 +67,53 @@ pub const PortOptions = enum {
     exclusive,
 };
 
+pub const Extension = struct {
+    ptr: ?*anyopaque = null,
+    ptr_len: usize = 0,
+    free_cb: ?*const fn (allocator: Allocator, v: ?*anyopaque) void = null,
+    dupe_empty: ?*const fn (allocator: Allocator) Allocator.Error!?*anyopaque = null,
+
+    pub fn init(allocator: Allocator, comptime T: type) !Extension {
+        const TypeInfo = @typeInfo(T);
+        std.debug.assert(TypeInfo == .Struct and (TypeInfo.Struct.layout == .@"packed" or TypeInfo.Struct.layout == .@"extern"));
+        const buffer = try allocator.alloc(u8, @sizeOf(T));
+        return .{
+            .ptr = buffer.ptr,
+            .ptr_len = buffer.len,
+        };
+    }
+
+    pub fn deinit(self: *Extension, allocator: Allocator) void {
+        if (self.ptr) |p| allocator.free(@as([*]u8, @ptrCast(@alignCast(p)))[0..self.ptr_len]);
+        self.ptr = null;
+        self.ptr_len = 0;
+        self.free_cb = null;
+        self.dupe_empty = null;
+    }
+
+    pub fn dupeEmpty(self: *Extension, allocator: Allocator) !Extension {
+        const buffer = try allocator.alloc(u8, self.ptr_len);
+        return .{
+            .ptr = buffer.ptr,
+            .ptr_len = buffer.len,
+            .free_cb = self.free_cb,
+            .dupe_empty = self.dupe_empty,
+        };
+    }
+
+    pub fn copyTo(self: *Extension, other: *Extension) void {
+        const other_bytes = @as([*]u8, @ptrCast(@alignCast(other.ptr)));
+        const self_bytes = @as([*]u8, @ptrCast(@alignCast(self.ptr)));
+        if (self.ptr_len == other.ptr_len) {
+            @memcpy(other_bytes[0..other.ptr_len], self_bytes[0..self.ptr_len]);
+        } else if (self.ptr_len < other.ptr_len) {
+            @memcpy(other_bytes[0..self.ptr_len], self_bytes[0..self.ptr_len]);
+        } else {
+            @memcpy(other_bytes[0..other.ptr_len], self_bytes[0..other.ptr_len]);
+        }
+    }
+};
+
 /// Options for socket contexts.
 pub const SocketCtxOpts = struct {
     key_file_path: ?[:0]const u8 = null,
@@ -82,14 +128,3 @@ pub const SocketCtxOpts = struct {
 pub const SslT = enum { boringssl, openssl, wolfssl, nossl };
 
 pub const EventLoopT = enum { io_uring, epoll, kqueue, libuv, gcd, asio };
-
-pub fn InternalCallback(comptime Poll: type, comptime Loop: type) type {
-    return struct {
-        const Self = @This();
-        p: Poll align(EXT_ALIGNMENT),
-        loop: *Loop,
-        cb_expects_the_loop: bool,
-        leave_poll_ready: bool,
-        cb: *const fn (allocator: Allocator, self: *Self) anyerror!void,
-    };
-}

@@ -1,17 +1,12 @@
 const build_opts = @import("build_opts");
+const std = @import("std");
 
-const Extensions = @import("zsockets.zig").Extensions;
-
-const LoopType = fn (comptime ssl: bool, comptime extensions: Extensions) type;
-
-pub const Loop: LoopType = switch (build_opts.event_loop_lib) {
-    .epoll, .kqueue => @import("events/epoll_kqueue.zig").Loop,
-    else => |v| @compileError("Unsupported event loop library " ++ @tagName(v)),
+pub const Loop = switch (build_opts.event_loop_lib) {
+    .kqueue, .epoll => @import("events/epoll_kqueue/loop.zig").Loop,
+    inline else => |tag| @compileError(std.fmt.comptimePrint("Unsupported event loop library: {s}", .{@tagName(tag)})),
 };
 
-const PollType = fn (comptime PollExt: type, comptime LoopT: type) type;
-
-pub const PollT: PollType = switch (build_opts.event_loop_lib) {
-    .epoll, .kqueue => @import("events/epoll_kqueue.zig").PollT,
-    else => |v| @compileError("Unsupported event loop library " ++ @tagName(v)),
+pub const Poll = switch (build_opts.event_loop_lib) {
+    .kqueue, .epoll => @import("events/epoll_kqueue/poll.zig").Poll,
+    inline else => |tag| @compileError(std.fmt.comptimePrint("Unsupported event loop library: {s}", .{@tagName(tag)})),
 };

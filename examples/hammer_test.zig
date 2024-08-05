@@ -2,8 +2,6 @@ const std = @import("std");
 const zs = @import("zSockets");
 
 const Allocator = std.mem.Allocator;
-const HttpNetwork = zs.Network(false, .{ .socket = HttpSocket, .socket_ctx = HttpCtx });
-const WebSocketNetwork = zs.Network(false, .{ .socket = WebSocket, .socket_ctx = HttpCtx });
 
 const PBSTR = "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||";
 const PBWIDTH = 60;
@@ -12,51 +10,53 @@ var last_val: i64 = -1;
 fn printProgress(percentage: f64) void {
     const val: i64 = @intFromFloat(percentage * 100);
     if (last_val != -1 and val == last_val) {
+        std.debug.print("progress: {d}\n", .{percentage});
         return;
     }
     last_val = val;
     const lpad: usize = @intFromFloat(percentage * PBWIDTH);
-    std.debug.print("\r{d} [{s: <60}]", .{ val, PBSTR[0..lpad] });
+    // std.debug.print("\r{d}% [{s: <60}]", .{ val, PBSTR[0..lpad] });
+    std.debug.print("{d}% [{s: <60}]\n", .{ val, PBSTR[0..lpad] });
 }
 
 var opened_connections: i64 = 0;
 var closed_connections: i64 = 0;
 var operations_done: i64 = 0;
 
-var http_context: *HttpNetwork.SocketCtx = undefined;
-var websocket_context: *HttpNetwork.SocketCtx = undefined;
-var listen_socket: *HttpNetwork.Socket.ListenSocket = undefined;
+var http_context: *zs.Context = undefined;
+var websocket_context: *zs.Context = undefined;
+var listen_socket: *zs.ListenSocket = undefined;
 
 var opened_clients: i64 = 0;
 var opened_servers: i64 = 0;
 var closed_clients: i64 = 0;
 var closed_servers: i64 = 0;
 
-var long_buffer: []u8 = undefined;
+var long_buffer: []u8 = &[_]u8{};
 const long_length: usize = 5 * 1024 * 1024;
 
 const pad_should_always_be: f64 = 14.652752;
 
-const HttpSocket = struct {
+const HttpSocket = extern struct {
     pad_invariant: f64,
     is_http: bool,
     post_pad_invariant: f64,
     is_client: bool,
-    content: [128]u8,
+    content: [128]u8 = undefined,
 };
 
-const WebSocket = struct {
+const WebSocket = extern struct {
     pad_invariant: f64,
     is_http: bool,
     post_pad_invariant: f64,
     is_client: bool,
-    content: [1024]u8,
+    content: [1024]u8 = undefined,
 };
 
-fn assumeState(s: *HttpNetwork.Socket, is_http: bool) void {
+fn assumeState(s: *zs.Socket, is_http: bool) void {
     switch (is_http) {
         true => {
-            const hs = @as(*HttpSocket, @ptrCast(@alignCast(s.getExt())));
+            const hs = s.ext(HttpSocket).?;
             if (hs.pad_invariant != pad_should_always_be or hs.post_pad_invariant != pad_should_always_be) {
                 std.debug.panic(
                     \\ERROR: Pad invariant is not correct!
@@ -70,7 +70,7 @@ fn assumeState(s: *HttpNetwork.Socket, is_http: bool) void {
             @memset(hs.content[0..128], 0);
         },
         else => {
-            const ws = @as(*WebSocket, @ptrCast(@alignCast(s.getExt())));
+            const ws = s.ext(WebSocket).?;
             if (ws.pad_invariant != pad_should_always_be or ws.post_pad_invariant != pad_should_always_be) {
                 std.debug.panic(
                     \\ERROR: Pad invariant is not correct!
@@ -86,7 +86,7 @@ fn assumeState(s: *HttpNetwork.Socket, is_http: bool) void {
     }
 }
 
-const HttpCtx = struct {
+const HttpCtx = extern struct {
     content: [1]u8,
 };
 
@@ -105,7 +105,7 @@ fn getRng() std.Random {
     return rand_;
 }
 
-fn performRandomOp(allocator: Allocator, s_: *HttpNetwork.Socket) !*HttpNetwork.Socket {
+fn performRandomOp(allocator: Allocator, s_: *zs.Socket) !*zs.Socket {
     var s = s_;
     const rand = getRng();
     switch (rand.uintAtMost(usize, 2147483647) % 5) {
@@ -113,12 +113,12 @@ fn performRandomOp(allocator: Allocator, s_: *HttpNetwork.Socket) !*HttpNetwork.
         1 => {
             if (!s.isClosed()) {
                 if ((rand.uintAtMost(usize, 2147483647) % 2) != 0) {
-                    s = try websocket_context.adoptSocket(allocator, s);
-                    const hs: *HttpSocket = @ptrCast(@alignCast(s.getExt()));
-                    hs.is_http = false;
+                    s = try websocket_context.adoptSocket(allocator, s, WebSocket);
+                    const ws = s.ext(WebSocket).?;
+                    ws.is_http = false;
                 } else {
-                    s = try http_context.adoptSocket(allocator, s);
-                    const hs: *HttpSocket = @ptrCast(@alignCast(s.getExt()));
+                    s = try http_context.adoptSocket(allocator, s, HttpSocket);
+                    const hs = s.ext(HttpSocket).?;
                     hs.is_http = true;
                 }
             }
@@ -140,38 +140,48 @@ fn performRandomOp(allocator: Allocator, s_: *HttpNetwork.Socket) !*HttpNetwork.
         4 => {
             // Triggers all timeouts next iteration
             s.setTimeout(4);
-            try zs.wakeupLoop(s.getCtx().getLoop());
+            s.ctx().loop.wakeup();
         },
         else => {},
     }
     return s;
 }
 
-fn onWakeup(_: Allocator, _: *HttpNetwork.Loop) !void {} // stub
+fn onWakeup(_: Allocator, _: *zs.Loop) !void {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
+} // stub
 
-fn onPre(_: Allocator, _: *HttpNetwork.Loop) !void {} // stub
+fn onPre(_: Allocator, _: *zs.Loop) !void {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
+} // stub
 
-fn onPost(_: Allocator, _: *HttpNetwork.Loop) !void {} // stub
+fn onPost(_: Allocator, _: *zs.Loop) !void {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
+} // stub
 
-fn onWebSocketWritable(allocator: Allocator, s: *HttpNetwork.Socket) !*HttpNetwork.Socket {
+fn onWebSocketWritable(allocator: Allocator, s: *zs.Socket) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
     assumeState(s, false);
     return performRandomOp(allocator, s);
 }
 
-fn onHttpSocketWritable(allocator: Allocator, s: *HttpNetwork.Socket) !*HttpNetwork.Socket {
+fn onHttpSocketWritable(allocator: Allocator, s: *zs.Socket) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
+
     assumeState(s, true);
     return performRandomOp(allocator, s);
 }
 
-fn onWebSocketClose(allocator: Allocator, s: *HttpNetwork.Socket, _: i32, _: ?*anyopaque) !*HttpNetwork.Socket {
+fn onWebSocketClose(allocator: Allocator, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
     assumeState(s, false);
-    const ws: *WebSocket = @ptrCast(@alignCast(s.getExt()));
+    const ws = s.ext(WebSocket).?;
     switch (ws.is_client) {
         true => closed_clients += 1,
         else => closed_servers += 1,
     }
     closed_connections += 1;
-    printProgress(@floatFromInt(@divTrunc(closed_connections, 10000)));
+    printProgress(@as(f64, @floatFromInt(closed_connections)) / 10000);
     if (closed_connections == 10000) {
         if (opened_clients != 5000) {
             std.debug.panic("ERROR: list closed before opening all clients!?!? {d}\n", .{opened_clients});
@@ -183,15 +193,17 @@ fn onWebSocketClose(allocator: Allocator, s: *HttpNetwork.Socket, _: i32, _: ?*a
     return s;
 }
 
-fn onHttpSocketClose(allocator: Allocator, s: *HttpNetwork.Socket, _: i32, _: ?*anyopaque) !*HttpNetwork.Socket {
+fn onHttpSocketClose(allocator: Allocator, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
     assumeState(s, true);
-    const hs: *HttpSocket = @ptrCast(@alignCast(s.getExt()));
+    const hs = s.ext(HttpSocket).?;
     switch (hs.is_client) {
         true => closed_clients += 1,
         else => closed_servers += 1,
     }
     closed_connections += 1;
-    printProgress(@floatFromInt(@divTrunc(closed_connections, 10000)));
+
+    printProgress(@as(f64, @floatFromInt(closed_connections)) / 10000);
     if (closed_connections == 10000) {
         if (opened_clients != 5000) {
             std.debug.panic("ERROR: list closed before opening all clients!?!? {d}\n", .{opened_clients});
@@ -203,59 +215,69 @@ fn onHttpSocketClose(allocator: Allocator, s: *HttpNetwork.Socket, _: i32, _: ?*
     return s;
 }
 
-fn onWebSocketEnd(allocator: Allocator, s_: *HttpNetwork.Socket) !*HttpNetwork.Socket {
+fn onWebSocketEnd(allocator: Allocator, s_: *zs.Socket) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
     var s = s_;
     assumeState(s, false);
     s = try s.close(allocator, 0, null);
     return performRandomOp(allocator, s);
 }
 
-fn onHttpSocketEnd(allocator: Allocator, s_: *HttpNetwork.Socket) !*HttpNetwork.Socket {
+fn onHttpSocketEnd(allocator: Allocator, s_: *zs.Socket) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
     var s = s_;
     assumeState(s, true);
     s = try s.close(allocator, 0, null);
     return performRandomOp(allocator, s);
 }
 
-fn onWebSocketData(allocator: Allocator, s: *HttpNetwork.Socket, data: []u8) !*HttpNetwork.Socket {
+fn onWebSocketData(allocator: Allocator, s: *zs.Socket, data: []u8) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
     assumeState(s, false);
     if (data.len == 0) @panic("ERROR: Got data event with no data\n");
     return performRandomOp(allocator, s);
 }
 
-fn onHttpSocketData(allocator: Allocator, s: *HttpNetwork.Socket, data: []u8) !*HttpNetwork.Socket {
+fn onHttpSocketData(allocator: Allocator, s: *zs.Socket, data: []u8) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
     assumeState(s, true);
     if (data.len == 0) @panic("ERROR: Got data event with no data\n");
     return performRandomOp(allocator, s);
 }
 
-fn onWebSocketOpen(_: Allocator, _: *HttpNetwork.Socket, _: bool, _: []u8) !*HttpNetwork.Socket {
+fn onWebSocketOpen(_: Allocator, _: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
     @panic("ERROR: on_web_socket_open called!\n");
 }
 
-fn nextConnection(allocator: Allocator) !*HttpNetwork.Socket {
+fn nextConnection(allocator: Allocator) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
     if (opened_clients == 5000) {
         @panic("ERROR! next_connection called when already having made all!\n");
     }
-    if (try http_context.connect(allocator, "127.0.0.1", 3000, null, 0)) |cxn_socket| return cxn_socket;
-    @panic("ERROR: Failed to start connection!\n");
+    return http_context.connect(allocator, HttpSocket, null, 3000, null, 0);
 }
 
-fn onHttpSocketConnectErr(allocator: Allocator, s: *HttpNetwork.Socket, _: i32) !*HttpNetwork.Socket {
+fn onHttpSocketConnectErr(allocator: Allocator, s: *zs.Socket, _: i32) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
     _ = try nextConnection(allocator);
     return s;
 }
 
-fn onWebSocketConnectErr(_: Allocator, _: *HttpNetwork.Socket, _: i32) !*HttpNetwork.Socket {
+fn onWebSocketConnectErr(_: Allocator, _: *zs.Socket, _: i32) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
     @panic("ERROR: WebSocket can never get connect errors!\n");
 }
 
-fn onHttpSocketOpen(allocator: Allocator, s: *HttpNetwork.Socket, is_client: bool, _: []u8) !*HttpNetwork.Socket {
-    const hs: *HttpSocket = @ptrCast(s.getExt());
-    hs.is_http = true;
-    hs.pad_invariant = pad_should_always_be;
-    hs.post_pad_invariant = pad_should_always_be;
-    hs.is_client = is_client;
+fn onHttpSocketOpen(allocator: Allocator, s: *zs.Socket, is_client: bool, _: []u8) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
+    const hs = s.ext(HttpSocket).?;
+    hs.* = .{
+        .is_http = true,
+        .pad_invariant = pad_should_always_be,
+        .post_pad_invariant = pad_should_always_be,
+        .is_client = is_client,
+    };
 
     assumeState(s, true);
     opened_connections += 1;
@@ -269,16 +291,18 @@ fn onHttpSocketOpen(allocator: Allocator, s: *HttpNetwork.Socket, is_client: boo
     return performRandomOp(allocator, s);
 }
 
-fn onWebSocketTimeout(allocator: Allocator, s: *HttpNetwork.Socket) !*HttpNetwork.Socket {
+fn onWebSocketTimeout(allocator: Allocator, s: *zs.Socket) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
     assumeState(s, false);
     return performRandomOp(allocator, s);
 }
 
 var last_time: ?i64 = null;
 
-fn onHttpSocketTimeout(allocator: Allocator, s: *HttpNetwork.Socket) !*HttpNetwork.Socket {
+fn onHttpSocketTimeout(allocator: Allocator, s: *zs.Socket) !*zs.Socket {
+    std.debug.print("{s} @ {s}:{d}:{d}\n", .{ @src().fn_name, @src().file, @src().line, @src().column });
     if (!s.isEstablished()) {
-        if (s != @as(*HttpNetwork.Socket, @ptrCast(@alignCast(listen_socket)))) {
+        if (@intFromPtr(s) != @intFromPtr(listen_socket)) {
             @panic("CONNECTION TIMEOUT!!! CANNOT HAPPEN!!\n");
         }
         if (last_time != null and (std.time.timestamp() - last_time.?) == 0) {
@@ -286,10 +310,11 @@ fn onHttpSocketTimeout(allocator: Allocator, s: *HttpNetwork.Socket) !*HttpNetwo
         }
 
         last_time = std.time.timestamp();
-        printProgress(@floatFromInt(@divTrunc(closed_connections, 10000)));
+        printProgress(@as(f64, @floatFromInt(closed_connections)) / 10000);
         s.setTimeout(16);
         return s;
     }
+
     assumeState(s, true);
     if (s.isShutdown()) {
         return s.close(allocator, 0, null);
@@ -304,9 +329,11 @@ pub fn main() !void {
 
     long_buffer = try allocator.alloc(u8, long_length * 1);
     defer allocator.free(long_buffer);
-    const loop = try HttpNetwork.Loop.init(allocator, null, &onWakeup, &onPre, &onPost);
+    const loop = try zs.Loop.init(allocator, null, null, &onWakeup, &onPre, &onPost);
+    defer loop.deinit(allocator);
 
-    http_context = try HttpNetwork.SocketCtx.init(allocator, loop);
+    http_context = try zs.Context.init(allocator, HttpCtx, loop);
+    defer http_context.deinit(allocator);
 
     http_context.setOnOpen(&onHttpSocketOpen);
     http_context.setOnData(&onHttpSocketData);
@@ -316,7 +343,8 @@ pub fn main() !void {
     http_context.setOnEnd(&onHttpSocketEnd);
     http_context.setOnConnectError(&onHttpSocketConnectErr);
 
-    websocket_context = @ptrCast(@alignCast(try WebSocketNetwork.SocketCtx.init(allocator, @ptrCast(@alignCast(loop)))));
+    websocket_context = try http_context.initChildContext(allocator, HttpCtx);
+    defer websocket_context.deinit(allocator);
 
     websocket_context.setOnOpen(@ptrCast(&onWebSocketOpen));
     websocket_context.setOnData(@ptrCast(&onWebSocketData));
@@ -326,17 +354,15 @@ pub fn main() !void {
     websocket_context.setOnEnd(@ptrCast(&onWebSocketEnd));
     websocket_context.setOnConnectError(@ptrCast(&onWebSocketConnectErr));
 
-    listen_socket = try http_context.listen(allocator, "127.0.0.1", 3000, 0);
-    @as(*HttpNetwork.Socket, @ptrCast(@alignCast(listen_socket))).setTimeout(16);
+    listen_socket = try http_context.listen(allocator, HttpSocket, null, 3000, 0);
+    defer listen_socket.close() catch unreachable;
+    listen_socket.s.setTimeout(16);
 
-    std.debug.print("Running hammer test over tcpip\nListening on port 3000\n", .{});
+    std.debug.print("Running hammer test over tcpip\n", .{});
     printProgress(0);
     _ = try nextConnection(allocator);
     try loop.run(allocator);
 
-    websocket_context.deinit(allocator);
-    http_context.deinit(allocator);
-    loop.deinit(allocator);
     printProgress(1);
     std.debug.print("\n", .{});
     if (opened_clients == 5000 and closed_clients == 5000 and opened_servers == 5000 and closed_servers == 5000) {
