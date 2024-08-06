@@ -2,7 +2,7 @@
 
 zSockets is a from-scratch zig implementation of the [µSockets](https://github.com/uNetworking/uSockets) library. The name is a play on [µSockets](https://github.com/uNetworking/uSockets), where the "µ" represents the metric prefix for `micro` (1e−6); here, the `z` represents the metric prefix for `zepto` (1e-21) and the Zig programming language.
 
-# Setup
+## Setup
 
 Clone the repository and its submodules:
 ```sh
@@ -24,6 +24,56 @@ To test with `boringssl` and `quic`:
 zig build test -DUSE_BORINGSSL -DUSE_QUIC
 ```
 
+## Examples
+
+Ensure that you've cloned the repository and its submodules:
+```sh
+git clone --recurse-submodules git@github.com:cryptodeal/zSockets.git
+```
+
+### Echo Server
+```sh
+zig build echo_server
+```
+
+In another terminal:
+```sh
+curl localhost:3000
+```
+
+### Hammer Test (WIP: bug in implementation causes it to hang at ~93% completion)
+```sh
+zig build hammer_test
+```
+
+### HTTP Load Test
+```sh
+# args: <connections> <host> <port>
+zig build http_load_test -- 10000 127.0.0.1 3000
+```
+
+### HTTP Server
+```sh
+zig build http_server
+```
+
+In browser navigate to `localhost:3000`
+
+### TCP Load Test
+```sh
+# args: <connections> <host> <port>
+zig build tcp_load_test -- 10000 127.0.0.1 3000
+```
+
+### TCP Server
+```sh
+zig build tcp_server
+```
+
+In another terminal:
+```sh
+nc 127.0.0.1 3000
+```
 
 ## Status
 
