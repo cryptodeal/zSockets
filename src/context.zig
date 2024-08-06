@@ -40,7 +40,7 @@ pub const Context = struct {
             .long_timestamp = 0,
             .global_tick = 0,
         };
-        if (Extension) |T| loop._ext = try zs.Extension.init(allocator, T);
+        if (Extension) |T| self._ext = try zs.Extension.init(allocator, T);
         utils.internalLoopLink(loop, self);
         return self;
     }
@@ -49,6 +49,10 @@ pub const Context = struct {
         utils.internalLoopUnlink(self.loop, self);
         self._ext.deinit(allocator);
         allocator.destroy(self);
+    }
+
+    pub fn ext(self: *Context, comptime T: type) ?*align(@alignOf(u8)) T {
+        return @ptrCast(@alignCast(self._ext.ptr));
     }
 
     pub fn initChildContext(self: *Context, allocator: Allocator, comptime T: ?type) !*Context {
