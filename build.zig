@@ -210,6 +210,24 @@ pub fn build(b: *std.Build) !void {
 
     const run_http_server_step = b.step("http_server", "Run the HTTP server demo");
     run_http_server_step.dependOn(&run_http_server.step);
+
+    // examples/tcp_server.zig
+    const tcp_server_exe = b.addExecutable(.{
+        .name = "tcp_server",
+        .root_source_file = b.path("examples/tcp_server.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tcp_server_exe.linkLibC();
+    tcp_server_exe.root_module.addImport("zSockets", &lib.root_module);
+
+    const run_tcp_server = b.addRunArtifact(tcp_server_exe);
+    if (b.args) |args| {
+        run_tcp_server.addArgs(args);
+    }
+
+    const run_tcp_server_step = b.step("tcp_server", "Run the TCP server demo");
+    run_tcp_server_step.dependOn(&run_tcp_server.step);
 }
 
 const SslOpts = struct {
