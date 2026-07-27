@@ -32,12 +32,12 @@ When using TCP/UDP (no TLS) and one of the default event backends, the library h
 
 ### Event Backends
 
-| Backend | Platforms           | Is Default | Manually Configure |
-|---------|---------------------|------------|--------------------|
-| epoll   | Linux               | Yes        | -DWITH_EPOLL       |
-| kqueue  | Darwin/FreeBSD      | Yes        | -DWITH_KQUEUE      |
-| libuv   | supported platforms | No         | -DWITH_LIBUV       |
-| GCD     | Darwin              | No         | -DWITH_GCD         |
+| Backend | Platforms                                                                              | Is Default | Manually Configure |
+|---------|----------------------------------------------------------------------------------------|------------|--------------------|
+| epoll   | Linux                                                                                  | Yes        | -DWITH_EPOLL       |
+| kqueue  | Darwin/FreeBSD                                                                         | Yes        | -DWITH_KQUEUE      |
+| libuv   | [supported platforms](https://github.com/libuv/libuv/blob/v1.x/SUPPORTED_PLATFORMS.md) | No         | -DWITH_LIBUV       |
+| GCD     | Darwin                                                                                 | No         | -DWITH_GCD         |
 
 ### TLS
 
