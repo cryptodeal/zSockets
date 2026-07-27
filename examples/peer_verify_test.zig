@@ -1,5 +1,5 @@
 const std = @import("std");
-const zs = @import("zServ");
+const zs = @import("zSockets");
 
 const ssl = true;
 
@@ -157,8 +157,10 @@ fn expectPeerVerify(allocator: std.mem.Allocator, test_name: []const u8, expect_
     client_received_data = false;
 
     const loop = try zs.Loop.init(allocator, null, &onWakeup, &onPre, &onPost, null);
+    defer loop.deinit(allocator);
 
     server_context = try zs.SocketContext.init(allocator, ssl, loop, server_options, null);
+    defer server_context.deinit(allocator);
     server_context.setOnOpen(ssl, &onServerSocketOpen);
     server_context.setOnData(ssl, &onServerSocketData);
     server_context.setOnWritable(ssl, &onServerSocketWritable);
@@ -177,6 +179,7 @@ fn expectPeerVerify(allocator: std.mem.Allocator, test_name: []const u8, expect_
     }
     std.debug.print("Server listening on 127.0.0.1:{d}\n", .{port});
     client_context = try zs.SocketContext.init(allocator, ssl, loop, client_options, null);
+    defer client_context.deinit(allocator);
     client_context.setOnOpen(ssl, &onClientSocketOpen);
     client_context.setOnData(ssl, &onClientSocketData);
     client_context.setOnWritable(ssl, &onClientSocketWritable);
@@ -186,10 +189,6 @@ fn expectPeerVerify(allocator: std.mem.Allocator, test_name: []const u8, expect_
 
     _ = try client_context.connect(allocator, ssl, "127.0.0.1", port, null, 0, SocketCtx);
     try loop.run(allocator);
-
-    server_context.deinit(allocator);
-    client_context.deinit(allocator);
-    loop.deinit(allocator);
     listen_socket = null;
 
     const data_exchanged = server_received_data and client_received_data;
@@ -201,56 +200,58 @@ fn expectPeerVerify(allocator: std.mem.Allocator, test_name: []const u8, expect_
 }
 
 pub fn main(_: std.process.Init) !void {
-    var gpa = std.heap.DebugAllocator(.{}){};
-    defer std.debug.assert(gpa.deinit() == .ok);
-    const allocator = gpa.allocator();
+    // var gpa = std.heap.DebugAllocator(.{}){};
+    // defer std.debug.assert(gpa.deinit() == .ok);
+    // const allocator = gpa.allocator();
+
+    const allocator = std.heap.smp_allocator;
 
     // const allocator = std.heap.smp_allocator;
     try expectPeerVerify(allocator, "trusted client ca", true, .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/valid_server_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/valid_server_crt.pem",
-        .ca_file_name = "/Users/cryptodeal/zServ/misc/valid_ca_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
+        .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
     }, .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/valid_client_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/valid_client_crt.pem",
-        .ca_file_name = "/Users/cryptodeal/zServ/misc/valid_ca_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_client_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_client_crt.pem",
+        .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
     });
 
     try expectPeerVerify(allocator, "untrusted client ca", false, .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/valid_server_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/valid_server_crt.pem",
-        .ca_file_name = "/Users/cryptodeal/zServ/misc/valid_ca_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
+        .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
     }, .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/invalid_client_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/invalid_client_crt.pem",
-        .ca_file_name = "/Users/cryptodeal/zServ/misc/valid_ca_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/invalid_client_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/invalid_client_crt.pem",
+        .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
     });
 
     try expectPeerVerify(allocator, "trusted selfsigned client", true, .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/valid_server_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/valid_server_crt.pem",
-        .ca_file_name = "/Users/cryptodeal/zServ/misc/selfsigned_client_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
+        .ca_file_name = "/Users/cryptodeal/zSockets/misc/selfsigned_client_crt.pem",
     }, .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/selfsigned_client_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/selfsigned_client_crt.pem",
-        .ca_file_name = "/Users/cryptodeal/zServ/misc/valid_ca_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/selfsigned_client_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/selfsigned_client_crt.pem",
+        .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
     });
 
     try expectPeerVerify(allocator, "untrusted selfsigned client", false, .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/valid_server_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/valid_server_crt.pem",
-        .ca_file_name = "/Users/cryptodeal/zServ/misc/valid_ca_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
+        .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
     }, .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/selfsigned_client_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/selfsigned_client_crt.pem",
-        .ca_file_name = "/Users/cryptodeal/zServ/misc/valid_ca_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/selfsigned_client_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/selfsigned_client_crt.pem",
+        .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
     });
 
     try expectPeerVerify(allocator, "peer verify disabled", true, .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/valid_server_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/valid_server_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
     }, .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/valid_client_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/valid_client_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_client_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_client_crt.pem",
     });
 }

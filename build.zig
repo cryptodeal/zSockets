@@ -57,7 +57,7 @@ pub fn build(b: *std.Build) !void {
     // to our consumers. We must give it a name because a Zig package can expose
     // multiple modules and consumers will need to be able to specify which
     // module they want to access.
-    const mod = b.addModule("zServ", .{
+    const mod = b.addModule("zSockets", .{
         // The root source file is the "entry point" of this module. Users of
         // this module will only be able to access public declarations contained
         // in this file, which means that if you have declarations that you
@@ -178,12 +178,12 @@ pub fn build(b: *std.Build) !void {
             // List of modules available for import in source files part of the
             // root module.
             .imports = &.{
-                // Here "zServ" is the name you will use in your source code to
-                // import this module (e.g. `@import("zServ")`). The name is
+                // Here "zSockets" is the name you will use in your source code to
+                // import this module (e.g. `@import("zSockets")`). The name is
                 // repeated because you are allowed to rename your imports, which
                 // can be extremely useful in case of collisions (which can happen
                 // importing modules from different packages).
-                .{ .name = "zServ", .module = mod },
+                .{ .name = "zSockets", .module = mod },
             },
         }),
     });
@@ -195,7 +195,7 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zServ", .module = mod },
+                .{ .name = "zSockets", .module = mod },
             },
         }),
     });
@@ -207,7 +207,7 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zServ", .module = mod },
+                .{ .name = "zSockets", .module = mod },
             },
         }),
     });
@@ -219,7 +219,7 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zServ", .module = mod },
+                .{ .name = "zSockets", .module = mod },
             },
         }),
     });
@@ -231,7 +231,7 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zServ", .module = mod },
+                .{ .name = "zSockets", .module = mod },
                 .{ .name = "args", .module = b.dependency("args", .{ .target = target, .optimize = optimize }).module("args") },
             },
         }),
@@ -244,7 +244,7 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zServ", .module = mod },
+                .{ .name = "zSockets", .module = mod },
             },
         }),
     });
@@ -256,7 +256,7 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zServ", .module = mod },
+                .{ .name = "zSockets", .module = mod },
                 .{ .name = "args", .module = b.dependency("args", .{ .target = target, .optimize = optimize }).module("args") },
             },
         }),
@@ -269,7 +269,7 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zServ", .module = mod },
+                .{ .name = "zSockets", .module = mod },
                 .{ .name = "args", .module = b.dependency("args", .{ .target = target, .optimize = optimize }).module("args") },
             },
         }),
@@ -282,7 +282,7 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zServ", .module = mod },
+                .{ .name = "zSockets", .module = mod },
             },
         }),
     });
@@ -294,7 +294,7 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zServ", .module = mod },
+                .{ .name = "zSockets", .module = mod },
             },
         }),
     });
@@ -306,7 +306,7 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zServ", .module = mod },
+                .{ .name = "zSockets", .module = mod },
             },
         }),
     });

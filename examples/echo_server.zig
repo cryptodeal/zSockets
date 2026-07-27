@@ -1,7 +1,6 @@
 const std = @import("std");
-const zs = @import("zServ");
+const zs = @import("zSockets");
 
-// TODO: enable SSL support (example for `uSockets` uses ssl)
 const ssl = true;
 
 const EchoSocket = struct {
@@ -73,20 +72,24 @@ fn onEchoSocketTimeout(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket 
 }
 
 pub fn main(_: std.process.Init) !void {
-    var gpa = std.heap.DebugAllocator(.{}){};
-    defer std.debug.assert(gpa.deinit() == .ok);
-    const loop = try zs.Loop.init(gpa.allocator(), null, &onWakeup, &onPre, &onPost, null);
-    defer loop.deinit(gpa.allocator());
+    // var gpa = std.heap.DebugAllocator(.{}){};
+    // defer std.debug.assert(gpa.deinit() == .ok);
+    // const allocator = gpa.allocator();
+
+    const allocator = std.heap.smp_allocator;
+
+    const loop = try zs.Loop.init(allocator, null, &onWakeup, &onPre, &onPost, null);
+    defer loop.deinit(allocator);
 
     // TODO: enable SSL and pass relevant options
     const options: zs.SocketContextOptions = .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/valid_server_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/valid_server_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
         .passphrase = "1234",
     };
-    const echo_context = try zs.SocketContext.init(gpa.allocator(), ssl, loop, options, EchoContext);
+    const echo_context = try zs.SocketContext.init(allocator, ssl, loop, options, EchoContext);
     // TODO: implement `SocketContext.deinit`
-    defer echo_context.deinit(gpa.allocator());
+    defer echo_context.deinit(allocator);
 
     echo_context.setOnOpen(ssl, &onEchoSocketOpen);
     echo_context.setOnData(ssl, &onEchoSocketData);
@@ -95,9 +98,9 @@ pub fn main(_: std.process.Init) !void {
     echo_context.setOnTimeout(ssl, &onEchoSocketTimeout);
     echo_context.setOnEnd(ssl, &onEchoSocketEnd);
 
-    if (echo_context.listen(gpa.allocator(), ssl, null, 3000, 0, EchoSocket)) |_| {
+    if (echo_context.listen(allocator, ssl, null, 3000, 0, EchoSocket)) |_| {
         std.debug.print("Listening on port 3000...\n", .{});
-        try loop.run(gpa.allocator());
+        try loop.run(allocator);
     } else |_| {
         std.debug.print("Failed to listen!\n", .{});
     }

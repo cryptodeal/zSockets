@@ -1,7 +1,6 @@
 const std = @import("std");
-const zs = @import("zServ");
+const zs = @import("zSockets");
 
-// TODO: enable SSL support (example for `uSockets` uses ssl)
 const ssl = true;
 
 const pb_str = "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||";
@@ -309,9 +308,11 @@ fn onHttpSocketTimeout(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket 
 
 pub fn main(init: std.process.Init) !void {
     state = .{ .io = init.io };
-    var gpa = std.heap.DebugAllocator(.{}){};
-    defer std.debug.assert(gpa.deinit() == .ok);
-    const allocator = gpa.allocator();
+    // var gpa = std.heap.DebugAllocator(.{}){};
+    // defer std.debug.assert(gpa.deinit() == .ok);
+    // const allocator = gpa.allocator();
+
+    const allocator = std.heap.smp_allocator;
 
     prng = .init(@intCast(std.Io.Clock.real.now(state.io).toSeconds()));
     rand = prng.random();
@@ -323,8 +324,8 @@ pub fn main(init: std.process.Init) !void {
 
     // TODO: enable SSL and pass relevant options
     const options: zs.SocketContextOptions = .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/valid_server_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/valid_server_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
         .passphrase = "1234",
     };
     http_context = try zs.SocketContext.init(allocator, ssl, loop, options, HttpContext);

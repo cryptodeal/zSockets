@@ -1,6 +1,6 @@
 const std = @import("std");
-const zs = @import("zServ");
-// TODO: this test seems to hang ~93% on OSx w kqueue backend
+const zs = @import("zSockets");
+
 const ssl = true;
 
 const pb_str = "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||";
@@ -327,8 +327,8 @@ pub fn main(init: std.process.Init) !void {
 
     // TODO: enable SSL and pass relevant options
     const options: zs.SocketContextOptions = .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/valid_server_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/valid_server_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
         .passphrase = "1234",
     };
     http_context = try zs.SocketContext.init(allocator, ssl, loop, options, HttpContext);

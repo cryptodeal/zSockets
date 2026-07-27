@@ -1,5 +1,5 @@
 const std = @import("std");
-const zs = @import("zServ");
+const zs = @import("zSockets");
 
 const ssl = true;
 
@@ -58,6 +58,7 @@ pub fn main(_: std.process.Init) !void {
     // var gpa = std.heap.DebugAllocator(.{}){};
     // defer std.debug.assert(gpa.deinit() == .ok);
     // const allocator = gpa.allocator();
+
     const allocator = std.heap.smp_allocator;
 
     const loop = try zs.Loop.init(allocator, null, &onWakeup, &onPre, &onPost, null);
@@ -65,8 +66,8 @@ pub fn main(_: std.process.Init) !void {
 
     // TODO: enable SSL and pass relevant options
     const options: zs.SocketContextOptions = .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/valid_server_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/valid_server_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
         .passphrase = "1234",
     };
     const http_context = zs.SocketContext.init(allocator, false, loop, options, HttpContext) catch |err| {

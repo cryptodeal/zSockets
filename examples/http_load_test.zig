@@ -1,6 +1,6 @@
 const argsParser = @import("args");
 const std = @import("std");
-const zs = @import("zServ");
+const zs = @import("zSockets");
 
 const Options = struct {
     // This declares long options for double hyphen
@@ -11,7 +11,6 @@ const Options = struct {
     @"with-body": ?bool = null,
 };
 
-// TODO: enable SSL support (example for `uSockets` uses ssl)
 const ssl = true;
 
 const request_template = "GET / HTTP/1.1\r\nHost: localhost:3000\r\nUser-Agent: curl/7.68.0\r\nAccept: */*\r\n\r\n";
@@ -99,6 +98,7 @@ pub fn main(init: std.process.Init) !void {
     // var gpa = std.heap.DebugAllocator(.{}){};
     // defer std.debug.assert(gpa.deinit() == .ok);
     // const allocator = gpa.allocator();
+
     const allocator = std.heap.smp_allocator;
 
     if (args.options.@"pipeline-factor") |p| {
@@ -127,8 +127,8 @@ pub fn main(init: std.process.Init) !void {
 
     // TODO: enable SSL and pass relevant options
     const options: zs.SocketContextOptions = .{
-        .key_file_name = "/Users/cryptodeal/zServ/misc/valid_server_key.pem",
-        .cert_file_name = "/Users/cryptodeal/zServ/misc/valid_server_crt.pem",
+        .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
+        .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
         .passphrase = "1234",
     };
     const http_context = try zs.SocketContext.init(allocator, ssl, loop, options, null);

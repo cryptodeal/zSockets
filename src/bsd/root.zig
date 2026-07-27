@@ -110,6 +110,9 @@ pub fn recvmmsg(
         .visionos,
         .watchos,
         => {
+            for (0..vlen) |i| {
+                msgvec[i].hdr.controllen = 256;
+            }
             // TODO: leverage `recvmsg_x` private api
             if (c.supportSendRecvMsgX()) {
                 while (true) {
@@ -118,15 +121,14 @@ pub fn recvmmsg(
                     if (std.c.errno(ret) != .INTR) return error.RecvMmsgX;
                 }
             }
-            for (0..udp_max_num) |i| {
-                msgvec[i].hdr.controllen = 256;
+            for (0..vlen) |i| {
                 const ret = std.c.recvmsg(fd, &msgvec[i].hdr, flags);
                 if (ret == -1) {
                     return i;
                 }
                 msgvec[i].len = @intCast(ret);
             }
-            return udp_max_num;
+            return vlen;
         },
         else => {
             for (0..vlen) |i| {

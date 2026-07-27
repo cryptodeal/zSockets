@@ -1,5 +1,5 @@
 const std = @import("std");
-const zs = @import("zServ");
+const zs = @import("zSockets");
 
 fn onWakeup(_: std.mem.Allocator, _: *zs.Loop) !void {}
 

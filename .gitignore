@@ -6,3 +6,4 @@ src-out/
 zig-pkg/
 zig-out/
 hammer_test.sock
+.DS_Store

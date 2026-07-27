@@ -1,5 +1,5 @@
 const std = @import("std");
-const zs = @import("zServ");
+const zs = @import("zSockets");
 
 var context: *zs.quic.SocketContext = undefined;
 
@@ -51,9 +51,11 @@ fn onClose(_: std.mem.Allocator, _: *zs.quic.Socket) !void {
 }
 
 pub fn main(_: std.process.Init) !void {
-    var gpa = std.heap.DebugAllocator(.{}){};
-    defer std.debug.assert(gpa.deinit() == .ok);
-    const allocator = gpa.allocator();
+    // var gpa = std.heap.DebugAllocator(.{}){};
+    // defer std.debug.assert(gpa.deinit() == .ok);
+    // const allocator = gpa.allocator();
+
+    const allocator = std.heap.smp_allocator;
 
     const loop = try zs.Loop.init(allocator, null, &onWakeup, &onPre, &onPost, null);
     defer loop.deinit(allocator);

@@ -15,7 +15,7 @@ function gen_cert {
 
     openssl req -new -sha256 \
         -key ${path}/${CN}_key.pem \
-        -subj "/O=cryptodeal/O=zServ/CN=${CN}" \
+        -subj "/O=cryptodeal/O=zSockets/CN=${CN}" \
         -reqexts SAN \
         -config <(cat /etc/ssl/openssl.cnf \
             <(printf "\n[SAN]\nsubjectAltName=DNS:localhost,DNS:127.0.0.1")) \

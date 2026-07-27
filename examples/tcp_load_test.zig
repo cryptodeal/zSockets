@@ -1,6 +1,6 @@
 const argsParser = @import("args");
 const std = @import("std");
-const zs = @import("zServ");
+const zs = @import("zSockets");
 
 const ssl = false;
 
