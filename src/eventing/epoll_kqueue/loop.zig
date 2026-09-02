@@ -99,3 +99,7 @@ pub fn updatePendingReadyPolls(self: *Self, old_poll: ?*Poll, new_poll: ?*Poll, 
         }
     }
 }
+
+pub fn getExt(self: *Self, comptime T: type) ?*T {
+    return @ptrCast(@alignCast(self.ext.ptr));
+}

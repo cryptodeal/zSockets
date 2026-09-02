@@ -133,7 +133,13 @@ pub fn linkSocket(self: *Self, s: *Socket) void {
 
 // TODO: pub fn findServerNameUserdata(self: *Self, ssl: bool, hostname_pattern: []const u8) ?*anyopaque {}
 
-// TODO: pub fn addServerName(self: *Self, ssl: bool, hostname_pattern: []const u8, options: SocketContextOptions, user: ?*anyopaque) void {}
+pub fn addServerName(self: *Self, ssl: bool, hostname_pattern: []const u8, options: SocketContextOptions, user: ?*anyopaque) void {
+    if (build_opts.ssl_impl != .no_ssl) {
+        if (ssl) {
+            @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).addServerName(hostname_pattern, options, user);
+        }
+    }
+}
 
 // TODO: pub fn removeServerName(self: *Self, ssl: bool, hostname_pattern: []const u8) void {}
 

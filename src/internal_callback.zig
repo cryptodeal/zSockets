@@ -32,3 +32,7 @@ pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
     self.p.deinit(allocator, self.loop);
     allocator.destroy(self);
 }
+
+pub fn getExt(self: *Self, comptime T: type) ?*T {
+    return @ptrCast(@alignCast(self.ext.ptr));
+}

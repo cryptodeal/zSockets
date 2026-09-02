@@ -108,7 +108,14 @@ pub fn flush(self: *Self, _: bool) void {
     }
 }
 
-// TODO: pub fn serverNameUserdata(self: *Self, ssl: bool) ?*anyopaque {}
+pub fn serverNameUserdata(self: *Self, ssl: bool) ?*anyopaque {
+    if (build_opts.ssl_impl != .no_ssl) {
+        if (ssl) {
+            return @as(*openssl.SslSocket, @fieldParentPtr("s", self)).getSniUserdata();
+        }
+    }
+    return null;
+}
 
 // unused parameter `ssl: bool`
 pub fn isClosed(self: *const Self, _: bool) bool {

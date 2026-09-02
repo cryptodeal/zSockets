@@ -32,3 +32,7 @@ pub fn run(self: *Self, _: std.mem.Allocator) !void {
     loop_.integrate(self);
     CFRunLoopRun();
 }
+
+pub fn getExt(self: *Self, comptime T: type) ?*T {
+    return @ptrCast(@alignCast(self.ext.ptr));
+}

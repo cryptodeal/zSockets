@@ -22,6 +22,10 @@ pub fn createTimer(allocator: std.mem.Allocator, loop: *Loop, fallthrough: bool,
     return cb;
 }
 
+pub fn getTimerExt(t: *Timer, comptime T: type) ?*T {
+    return @as(*InternalCallback, @ptrCast(@alignCast(t))).getExt(T);
+}
+
 pub fn timerSet(t: *Timer, cb: ?*const fn (std.mem.Allocator, *Timer) anyerror!void, ms: i64, _: i64) void {
     const internal_cb: *InternalCallback = @ptrCast(@alignCast(t));
     internal_cb.cb = @ptrCast(@alignCast(cb));

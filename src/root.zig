@@ -3,6 +3,7 @@ const std = @import("std");
 // const build_opts = @import("build_opts");
 
 pub const createTimer = @import("eventing/impl.zig").createTimer;
+pub const getTimerExt = @import("eventing/impl.zig").getTimerExt;
 pub const timerSet = @import("eventing/impl.zig").timerSet;
 pub const timerClose = @import("eventing/impl.zig").timerClose;
 

@@ -87,3 +87,7 @@ pub fn run(self: *Self, _: std.mem.Allocator) !void {
     loop_.integrate(self);
     _ = libuv.uv_run(self.uv_loop, libuv.UV_RUN_DEFAULT);
 }
+
+pub fn getExt(self: *Self, comptime T: type) ?*T {
+    return @ptrCast(@alignCast(self.ext.ptr));
+}

@@ -24,6 +24,13 @@ pub const createTimer = switch (build_opts.event_backend) {
     else => |tag| @compileError("Event Backend `" ++ @tagName(tag) ++ "` not implemented."),
 };
 
+pub const getTimerExt = switch (build_opts.event_backend) {
+    .epoll, .kqueue => @import("epoll_kqueue/timer.zig").getTimerExt,
+    .gcd => @import("gcd/timer.zig").getTimerExt,
+    .libuv => @import("libuv/timer.zig").getTimerExt,
+    else => |tag| @compileError("Event Backend `" ++ @tagName(tag) ++ "` not implemented."),
+};
+
 pub const timerSet = switch (build_opts.event_backend) {
     .epoll, .kqueue => @import("epoll_kqueue/timer.zig").timerSet,
     .gcd => @import("gcd/timer.zig").timerSet,
