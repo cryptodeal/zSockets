@@ -141,7 +141,7 @@ pub const SslSocketContext = struct {
         }
     }
 
-    pub fn onServerName(self: *SslSocketContext, cb: *const fn (*SslSocketContext, []const u8) void) void {
+    pub fn setOnServerName(self: *SslSocketContext, cb: *const fn (*SslSocketContext, []const u8) void) void {
         self.on_server_name = cb;
     }
 

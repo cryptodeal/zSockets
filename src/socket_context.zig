@@ -131,9 +131,16 @@ pub fn linkSocket(self: *Self, s: *Socket) void {
     self.head_sockets = s;
 }
 
-// TODO: pub fn findServerNameUserdata(self: *Self, ssl: bool, hostname_pattern: []const u8) ?*anyopaque {}
+pub fn findServerNameUserdata(self: *Self, ssl: bool, hostname_pattern: [:0]const u8) ?*anyopaque {
+    if (build_opts.ssl_impl != .no_ssl) {
+        if (ssl) {
+            return @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).findServerNameUserdata(hostname_pattern);
+        }
+    }
+    return null;
+}
 
-pub fn addServerName(self: *Self, ssl: bool, hostname_pattern: []const u8, options: SocketContextOptions, user: ?*anyopaque) void {
+pub fn addServerName(self: *Self, ssl: bool, hostname_pattern: [:0]const u8, options: SocketContextOptions, user: ?*anyopaque) void {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).addServerName(hostname_pattern, options, user);
@@ -141,11 +148,30 @@ pub fn addServerName(self: *Self, ssl: bool, hostname_pattern: []const u8, optio
     }
 }
 
-// TODO: pub fn removeServerName(self: *Self, ssl: bool, hostname_pattern: []const u8) void {}
+pub fn removeServerName(self: *Self, allocator: std.mem.Allocator, ssl: bool, hostname_pattern: [:0]const u8) void {
+    if (build_opts.ssl_impl != .no_ssl) {
+        if (ssl) {
+            @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).removeServerName(allocator, hostname_pattern);
+        }
+    }
+}
 
-// TODO: pub fn onServerName() void {}
+pub fn setOnServerName(self: *Self, ssl: bool, func: *const fn (*Self, [:0]const u8) void) void {
+    if (build_opts.ssl_impl != .no_ssl) {
+        if (ssl) {
+            @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).setOnServerName(func);
+        }
+    }
+}
 
-// TODO: pub fn getNativeHandle(self: *Self, ssl: bool) ?*anyopaque {}
+pub fn getNativeHandle(self: *Self, ssl: bool) ?*anyopaque {
+    if (build_opts.ssl_impl != .no_ssl) {
+        if (ssl) {
+            return @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).getNativeHandle();
+        }
+    }
+    return null;
+}
 
 const ListenError = std.mem.Allocator.Error || std.fmt.BufPrintError || error{ CreateListenSocket, GetAddrInfo };
 
