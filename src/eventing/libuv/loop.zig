@@ -29,7 +29,7 @@ fn prepareCb(p: ?*libuv.uv_prepare_t) callconv(.c) void {
 
 fn checkCb(p: ?*libuv.uv_check_t) callconv(.c) void {
     const loop: *Self = @ptrCast(@alignCast(p.?.data));
-    loop_.post(loop.allocator, loop) catch |err| {
+    loop_.post(loop.allocator, loop.io, loop) catch |err| {
         std.debug.print("checkCb Error: {s}\n", .{@errorName(err)});
         std.debug.dumpCurrentStackTrace(.{});
     };
