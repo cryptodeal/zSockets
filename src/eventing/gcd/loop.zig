@@ -28,7 +28,7 @@ pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
     allocator.destroy(self);
 }
 
-pub fn run(self: *Self, _: std.mem.Allocator) !void {
+pub fn run(self: *Self, _: std.mem.Allocator, _: std.Io) !void {
     loop_.integrate(self);
     CFRunLoopRun();
 }

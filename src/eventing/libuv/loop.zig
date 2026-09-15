@@ -85,7 +85,7 @@ fn pump(self: *Self) void {
     _ = libuv.uv_run(self.uv_loop, libuv.UV_RUN_NOWAIT);
 }
 
-pub fn run(self: *Self, _: std.mem.Allocator) !void {
+pub fn run(self: *Self, _: std.mem.Allocator, _: std.Io) !void {
     loop_.integrate(self);
     _ = libuv.uv_run(self.uv_loop, libuv.UV_RUN_DEFAULT);
 }
