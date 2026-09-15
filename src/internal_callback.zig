@@ -9,18 +9,20 @@ const Self = @This();
 // stashes user provided allocator for use when backend
 // implementation needs an allocator for callback
 allocator: std.mem.Allocator,
+io: std.Io,
 p: Poll = .{},
 loop: *Loop,
 expects_loop: bool = false,
 leave_poll_ready: bool = false,
-cb: ?*const fn (std.mem.Allocator, *Self) anyerror!void = null,
+cb: ?*const fn (std.mem.Allocator, std.Io, *Self) anyerror!void = null,
 server_data: ?*anyopaque = null,
 ext: Extension = .{},
 
-pub fn init(allocator: std.mem.Allocator, loop: *Loop, comptime MaybeT: ?type) !*Self {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, comptime MaybeT: ?type) !*Self {
     const self = try allocator.create(Self);
     self.* = .{
         .allocator = allocator,
+        .io = io,
         .loop = loop,
         .ext = try Extension.init(allocator, MaybeT),
     };

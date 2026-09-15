@@ -5,17 +5,17 @@ var context: *zs.quic.SocketContext = undefined;
 var responses: usize = 0;
 var loop: *zs.Loop = undefined;
 
-fn onWakeup(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onWakeup(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onPre(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onPost(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 var per_socket_requests: [100]u32 = undefined;
 var sockets: [100]*zs.quic.Socket = undefined;
 var num_sockets: usize = 0;
 
-fn onPrint(_: std.mem.Allocator, _: *zs.Timer) !void {
+fn onPrint(_: std.mem.Allocator, _: std.Io, _: *zs.Timer) !void {
     std.debug.print("Responses per second: {d}\n", .{responses});
     responses = 0;
     for (0..num_sockets) |i| {
@@ -76,12 +76,12 @@ fn onStreamClose(_: std.mem.Allocator, _: ?*anyopaque) !void {}
 
 var ignore = false;
 
-fn onStart(allocator: std.mem.Allocator, _: *zs.Timer) !void {
+fn onStart(allocator: std.mem.Allocator, io: std.Io, _: *zs.Timer) !void {
     if (num_sockets < 10) {
-        _ = try context.connect(allocator, "::1", 9004, null);
+        _ = try context.connect(allocator, io, "::1", 9004, null);
     } else {
         if (!ignore) {
-            const delay_timer = try zs.createTimer(allocator, loop, false, null);
+            const delay_timer = try zs.createTimer(allocator, io, loop, false, null);
             zs.timerSet(delay_timer, &onPrint, 1000, 1000);
             ignore = true;
             std.debug.print("Starting now\n", .{});
@@ -122,19 +122,19 @@ fn onClose(_: std.mem.Allocator, _: *zs.quic.Socket) !void {
     std.debug.print("QUIC connection closed!\n", .{});
 }
 
-pub fn main(_: std.process.Init) !void {
+pub fn main(init: std.process.Init) !void {
     // var gpa = std.heap.DebugAllocator(.{}){};
     // defer std.debug.assert(gpa.deinit() == .ok);
     // const allocator = gpa.allocator();
 
     const allocator = std.heap.smp_allocator;
 
-    loop = try zs.Loop.init(allocator, null, &onWakeup, &onPre, &onPost, null);
+    loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, null);
     defer loop.deinit(allocator);
 
     const options: zs.quic.SocketContext.Options = .{};
 
-    context = try zs.quic.SocketContext.init(allocator, loop, options, null);
+    context = try zs.quic.SocketContext.init(allocator, init.io, loop, options, null);
     context.setOnStreamData(&onStreamData);
     context.setOnStreamOpen(&onStreamOpen);
     context.setOnStreamClose(&onStreamClose);
@@ -143,7 +143,7 @@ pub fn main(_: std.process.Init) !void {
     context.setOnOpen(&onOpen);
     context.setOnClose(&onClose);
 
-    const start_timer = try zs.createTimer(allocator, loop, false, null);
+    const start_timer = try zs.createTimer(allocator, init.io, loop, false, null);
     defer zs.timerClose(allocator, start_timer);
     zs.timerSet(start_timer, &onStart, 100, 100);
 
@@ -153,6 +153,6 @@ pub fn main(_: std.process.Init) !void {
     // }
 
     // Run the event loop
-    try loop.run(allocator);
+    try loop.run(allocator, init.io);
     std.debug.print("Falling through!\n", .{});
 }

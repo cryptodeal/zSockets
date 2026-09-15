@@ -9,7 +9,7 @@ const Poll = @import("poll.zig");
 
 fn asyncCb(a: ?*libuv.uv_async_t) callconv(.c) void {
     const cb: *InternalCallback = @ptrCast(@alignCast(a.?.data));
-    cb.cb.?(cb.allocator, cb) catch |err| {
+    cb.cb.?(cb.allocator, cb.io, cb) catch |err| {
         std.debug.print("asyncCb Error: {s}\n", .{@errorName(err)});
         std.debug.dumpCurrentStackTrace(.{});
     };
@@ -22,15 +22,15 @@ fn closeCbFree(t: ?*libuv.uv_handle_t) callconv(.c) void {
     cb.deinit(cb.allocator);
 }
 
-pub fn createAsync(allocator: std.mem.Allocator, loop: *Loop, _: bool, comptime Ext: ?type) !*InternalCallback {
-    const cb = try InternalCallback.init(allocator, loop, Ext);
+pub fn createAsync(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, _: bool, comptime Ext: ?type) !*InternalCallback {
+    const cb = try InternalCallback.init(allocator, io, loop, Ext);
     cb.p.callback_payload = try Poll.CallbackPayload.init(allocator, &cb.p);
     cb.loop = loop;
     cb.server_data = try allocator.create(libuv.uv_async_t);
     return cb;
 }
 
-pub fn asyncSet(a: *InternalCallback, cb: *const fn (std.mem.Allocator, *InternalCallback) anyerror!void) void {
+pub fn asyncSet(a: *InternalCallback, cb: *const fn (std.mem.Allocator, std.Io, *InternalCallback) anyerror!void) void {
     a.cb = cb;
     const uv_async: ?*libuv.uv_async_t = @ptrCast(@alignCast(a.server_data));
     _ = libuv.uv_async_init(a.loop.uv_loop, uv_async, &asyncCb);

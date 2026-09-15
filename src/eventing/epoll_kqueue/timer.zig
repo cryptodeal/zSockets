@@ -8,8 +8,8 @@ const InternalCallback = @import("../../internal_callback.zig");
 const Loop = @import("loop.zig");
 const Poll = @import("poll.zig");
 
-pub fn createTimer(allocator: std.mem.Allocator, loop: *Loop, fallthrough: bool, comptime MaybeT: ?type) !*Timer {
-    const cb = try InternalCallback.init(allocator, loop, MaybeT);
+pub fn createTimer(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallthrough: bool, comptime MaybeT: ?type) !*Timer {
+    const cb = try InternalCallback.init(allocator, io, loop, MaybeT);
     errdefer cb.deinit(allocator);
     if (build_opts.event_backend == .epoll) {
         try cb.p.create(allocator, loop, fallthrough, null);
@@ -28,7 +28,7 @@ pub fn getTimerExt(t: *Timer, comptime T: type) ?*T {
     return @as(*InternalCallback, @ptrCast(@alignCast(t))).getExt(T);
 }
 
-pub fn timerSet(t: *Timer, cb: ?*const fn (std.mem.Allocator, *Timer) anyerror!void, ms: i64, repeat_ms: i64) void {
+pub fn timerSet(t: *Timer, cb: ?*const fn (std.mem.Allocator, std.Io, *Timer) anyerror!void, ms: i64, repeat_ms: i64) void {
     const internal_cb: *InternalCallback = @ptrCast(@alignCast(t));
     internal_cb.cb = @ptrCast(@alignCast(cb));
     if (build_opts.event_backend == .epoll) {

@@ -11,7 +11,7 @@ const UvTimer = struct {};
 
 fn timerCb(t: ?*libuv.uv_timer_t) callconv(.c) void {
     const cb: *InternalCallback = @ptrCast(@alignCast(t.?.data));
-    cb.cb.?(cb.allocator, cb) catch |err| {
+    cb.cb.?(cb.allocator, cb.io, cb) catch |err| {
         std.debug.print("timerCb Error: {s}\n", .{@errorName(err)});
         std.debug.dumpCurrentStackTrace(.{});
     };
@@ -25,8 +25,8 @@ fn closeCbFree(t: ?*libuv.uv_handle_t) callconv(.c) void {
     // TODO: probably need to free timer here as well
 }
 
-pub fn createTimer(allocator: std.mem.Allocator, loop: *Loop, fallthrough: bool, comptime Ext: ?type) !*Timer {
-    const cb = try InternalCallback.init(allocator, loop, Ext);
+pub fn createTimer(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallthrough: bool, comptime Ext: ?type) !*Timer {
+    const cb = try InternalCallback.init(allocator, io, loop, Ext);
     cb.p.callback_payload = try Poll.CallbackPayload.init(allocator, &cb.p);
     const uv_timer = try allocator.create(libuv.uv_timer_t);
     _ = libuv.uv_timer_init(loop.uv_loop, uv_timer);
@@ -42,7 +42,7 @@ pub fn getTimerExt(t: *Timer, comptime T: type) ?*T {
     return @as(*InternalCallback, @ptrCast(@alignCast(t))).getExt(T);
 }
 
-pub fn timerSet(t: *Timer, cb: ?*const fn (std.mem.Allocator, *Timer) anyerror!void, ms: i64, repeat_ms: i64) void {
+pub fn timerSet(t: *Timer, cb: ?*const fn (std.mem.Allocator, std.Io, *Timer) anyerror!void, ms: i64, repeat_ms: i64) void {
     const internal_cb: *InternalCallback = @ptrCast(@alignCast(t));
     internal_cb.cb = @ptrCast(@alignCast(cb));
     const uv_timer: ?*libuv.uv_timer_t = @ptrCast(@alignCast(internal_cb.server_data));

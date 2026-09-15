@@ -23,13 +23,13 @@ const SocketCtx = struct {
     backpressure: []u8,
 };
 
-fn onWakeup(allocator: std.mem.Allocator, loop: *zs.Loop) !void {
+fn onWakeup(allocator: std.mem.Allocator, _: std.Io, loop: *zs.Loop) !void {
     try zs.loop.internalTimerSweep(allocator, loop);
 }
 
-fn onPre(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onPost(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 fn writeBuffered(allocator: std.mem.Allocator, ssl_: bool, s: *zs.Socket, data: []const u8) !usize {
     const ctx = s.getExt(SocketCtx).?;
@@ -139,7 +139,7 @@ fn onServerSocketTimeout(_: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
     return s;
 }
 
-fn expectPeerVerify(allocator: std.mem.Allocator, test_name: []const u8, expect_data_exchanged: bool, server_options: zs.SocketContextOptions, client_options: zs.SocketContextOptions) !void {
+fn expectPeerVerify(allocator: std.mem.Allocator, io: std.Io, test_name: []const u8, expect_data_exchanged: bool, server_options: zs.SocketContextOptions, client_options: zs.SocketContextOptions) !void {
     std.debug.print(
         "----------------------------------------\n[[ {s} ]]\n  server_key: {s}\n  server_crt: {s}\n  server_ca: {s}\n  client_crt: {s}\n  client_key: {s}\n  client_ca: {s}\n\n",
         .{
@@ -156,7 +156,7 @@ fn expectPeerVerify(allocator: std.mem.Allocator, test_name: []const u8, expect_
     server_received_data = false;
     client_received_data = false;
 
-    const loop = try zs.Loop.init(allocator, null, &onWakeup, &onPre, &onPost, null);
+    const loop = try zs.Loop.init(allocator, io, null, &onWakeup, &onPre, &onPost, null);
     defer loop.deinit(allocator);
 
     server_context = try zs.SocketContext.init(allocator, ssl, loop, server_options, null);
@@ -188,7 +188,7 @@ fn expectPeerVerify(allocator: std.mem.Allocator, test_name: []const u8, expect_
     client_context.setOnEnd(ssl, &onClientSocketEnd);
 
     _ = try client_context.connect(allocator, ssl, "127.0.0.1", port, null, 0, SocketCtx);
-    try loop.run(allocator);
+    try loop.run(allocator, io);
     listen_socket = null;
 
     const data_exchanged = server_received_data and client_received_data;
@@ -199,7 +199,7 @@ fn expectPeerVerify(allocator: std.mem.Allocator, test_name: []const u8, expect_
     std.debug.print("[[ OK ]]\n\n", .{});
 }
 
-pub fn main(_: std.process.Init) !void {
+pub fn main(init: std.process.Init) !void {
     // var gpa = std.heap.DebugAllocator(.{}){};
     // defer std.debug.assert(gpa.deinit() == .ok);
     // const allocator = gpa.allocator();
@@ -207,7 +207,7 @@ pub fn main(_: std.process.Init) !void {
     const allocator = std.heap.smp_allocator;
 
     // const allocator = std.heap.smp_allocator;
-    try expectPeerVerify(allocator, "trusted client ca", true, .{
+    try expectPeerVerify(allocator, init.io, "trusted client ca", true, .{
         .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
         .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
         .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
@@ -217,7 +217,7 @@ pub fn main(_: std.process.Init) !void {
         .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
     });
 
-    try expectPeerVerify(allocator, "untrusted client ca", false, .{
+    try expectPeerVerify(allocator, init.io, "untrusted client ca", false, .{
         .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
         .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
         .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
@@ -227,7 +227,7 @@ pub fn main(_: std.process.Init) !void {
         .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
     });
 
-    try expectPeerVerify(allocator, "trusted selfsigned client", true, .{
+    try expectPeerVerify(allocator, init.io, "trusted selfsigned client", true, .{
         .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
         .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
         .ca_file_name = "/Users/cryptodeal/zSockets/misc/selfsigned_client_crt.pem",
@@ -237,7 +237,7 @@ pub fn main(_: std.process.Init) !void {
         .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
     });
 
-    try expectPeerVerify(allocator, "untrusted selfsigned client", false, .{
+    try expectPeerVerify(allocator, init.io, "untrusted selfsigned client", false, .{
         .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
         .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
         .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
@@ -247,7 +247,7 @@ pub fn main(_: std.process.Init) !void {
         .ca_file_name = "/Users/cryptodeal/zSockets/misc/valid_ca_crt.pem",
     });
 
-    try expectPeerVerify(allocator, "peer verify disabled", true, .{
+    try expectPeerVerify(allocator, init.io, "peer verify disabled", true, .{
         .key_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_key.pem",
         .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
     }, .{

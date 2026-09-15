@@ -6,16 +6,16 @@ const InternalCallback = @import("../../internal_callback.zig");
 const Loop = @import("loop.zig");
 const Poll = @import("poll.zig");
 
-pub fn createAsync(allocator: std.mem.Allocator, loop: *Loop, fallthrough: bool, comptime MaybeT: ?type) !*InternalCallback {
+pub fn createAsync(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallthrough: bool, comptime MaybeT: ?type) !*InternalCallback {
     if (build_opts.event_backend == .epoll) {
-        const cb = try InternalCallback.init(allocator, loop, MaybeT);
+        const cb = try InternalCallback.init(allocator, io, loop, MaybeT);
         errdefer cb.deinit(allocator);
         try cb.p.create(allocator, loop, fallthrough, null);
         cb.p.init(@intCast(std.os.linux.eventfd(0, std.os.linux.EFD.NONBLOCK | std.os.linux.EFD.CLOEXEC)), .callback);
         cb.expects_loop = true;
         return cb;
     } else {
-        const cb = try InternalCallback.init(allocator, loop, MaybeT);
+        const cb = try InternalCallback.init(allocator, io, loop, MaybeT);
         errdefer cb.deinit(allocator);
         cb.p.state.poll_type = .polling_in;
         cb.expects_loop = true;
@@ -25,7 +25,7 @@ pub fn createAsync(allocator: std.mem.Allocator, loop: *Loop, fallthrough: bool,
     }
 }
 
-pub fn asyncSet(a: *InternalCallback, cb: *const fn (std.mem.Allocator, *InternalCallback) anyerror!void) void {
+pub fn asyncSet(a: *InternalCallback, cb: *const fn (std.mem.Allocator, std.Io, *InternalCallback) anyerror!void) void {
     a.cb = cb;
     if (build_opts.event_backend == .epoll) a.p.start(a.loop, constants.socket_readable);
 }

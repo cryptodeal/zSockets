@@ -11,6 +11,7 @@ const Self = @This();
 // TODO: remove this; currently used for stashing user provided
 // allocator in callbacks
 allocator: std.mem.Allocator,
+io: std.Io,
 data: LoopData,
 uv_loop: *libuv.uv_loop_t,
 is_default: bool,
@@ -20,7 +21,7 @@ ext: Extension = .{},
 
 fn prepareCb(p: ?*libuv.uv_prepare_t) callconv(.c) void {
     const loop: *Self = @ptrCast(@alignCast(p.?.data));
-    loop_.pre(loop.allocator, loop) catch |err| {
+    loop_.pre(loop.allocator, loop.io, loop) catch |err| {
         std.debug.print("prepareCb Error: {s}\n", .{@errorName(err)});
         std.debug.dumpCurrentStackTrace(.{});
     };
@@ -34,15 +35,16 @@ fn checkCb(p: ?*libuv.uv_check_t) callconv(.c) void {
     };
 }
 
-pub fn init(allocator: std.mem.Allocator, hint: ?*anyopaque, wakeup_cb: *const fn (std.mem.Allocator, *Self) anyerror!void, pre_cb: *const fn (std.mem.Allocator, *Self) anyerror!void, post_cb: *const fn (std.mem.Allocator, *Self) anyerror!void, comptime MaybeT: ?type) !*Self {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, hint: ?*anyopaque, wakeup_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, pre_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, post_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, comptime MaybeT: ?type) !*Self {
     const self = try allocator.create(Self);
     self.* = .{
         .allocator = allocator,
+        .io = io,
         .uv_loop = if (hint) |h| @ptrCast(@alignCast(h)) else libuv.uv_loop_new(),
         .is_default = hint != null,
         .uv_pre = try UvWrapper(libuv.uv_prepare_t).init(allocator),
         .uv_check = try UvWrapper(libuv.uv_check_t).init(allocator),
-        .data = try LoopData.init(allocator, self, wakeup_cb, pre_cb, post_cb),
+        .data = try LoopData.init(allocator, io, self, wakeup_cb, pre_cb, post_cb),
         .ext = try Extension.init(allocator, MaybeT),
     };
     _ = libuv.uv_prepare_init(self.uv_loop, self.uv_pre.ptr());

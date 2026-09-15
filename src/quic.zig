@@ -71,7 +71,7 @@ pub const SocketContext = struct {
         .log_buf = &logBufCb,
     };
 
-    pub fn init(allocator: std.mem.Allocator, loop: *Loop, options: Options, comptime Ext: ?type) !*SocketContext {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, options: Options, comptime Ext: ?type) !*SocketContext {
         std.debug.print("Creating socket context with ssl: {s}\n", .{options.key_file_name});
         const self = try allocator.create(SocketContext);
         errdefer allocator.destroy(self);
@@ -112,7 +112,7 @@ pub const SocketContext = struct {
         self.client_engine = quic.lsquic_engine_new(quic.LSENG_HTTP, &engine_api_client);
         std.debug.print("Engine: 0x{x}\n", .{@intFromPtr(self.engine)});
         std.debug.print("Client Engine: 0x{x}\n", .{@intFromPtr(self.client_engine)});
-        const delay_timer = try createTimer(allocator, loop, false, null);
+        const delay_timer = try createTimer(allocator, io, loop, false, null);
         timerSet(delay_timer, &timerCb, 50, 50);
         global_engine = self.engine;
         global_client_engine = self.client_engine;
@@ -177,18 +177,18 @@ pub const SocketContext = struct {
         return false;
     }
 
-    pub fn listen(self: *SocketContext, allocator: std.mem.Allocator, host: [:0]const u8, port: u32, comptime _: ?type) !*udp.Socket {
-        return udp.Socket.init(allocator, self.loop, null, &onUdpSocketData, &onUdpSocketWritable, host, port, self);
+    pub fn listen(self: *SocketContext, allocator: std.mem.Allocator, io: std.Io, host: [:0]const u8, port: u32, comptime _: ?type) !*udp.Socket {
+        return udp.Socket.init(allocator, io, self.loop, null, &onUdpSocketData, &onUdpSocketWritable, host, port, self);
     }
 
-    pub fn connect(self: *SocketContext, allocator: std.mem.Allocator, _: [:0]const u8, _: u32, comptime _: ?type) !?*anyopaque {
+    pub fn connect(self: *SocketContext, allocator: std.mem.Allocator, io: std.Io, _: [:0]const u8, _: u32, comptime _: ?type) !?*anyopaque {
         std.debug.print("Connecting..\n", .{});
         var storage = std.mem.zeroes(std.c.sockaddr.storage);
         var addr: *std.c.sockaddr.in6 = @ptrCast(@alignCast(&storage));
         addr.addr[15] = 1;
         addr.port = std.mem.nativeToBig(u16, 9004);
         addr.family = std.c.AF.INET6;
-        const udp_socket = try udp.Socket.init(allocator, self.loop, null, &onUdpSocketDataClient, &onUdpSocketWritable, &.{}, 0, self);
+        const udp_socket = try udp.Socket.init(allocator, io, self.loop, null, &onUdpSocketDataClient, &onUdpSocketWritable, &.{}, 0, self);
         const ephemeral = udp_socket.port;
         std.debug.print("Connecting with udp socket bound to port: {d}\n", .{ephemeral});
         std.debug.print("Client udp socket is: 0x{x}\n", .{@intFromPtr(udp_socket)});
@@ -638,7 +638,7 @@ fn hsiProcessHeader(hdr_set: ?*anyopaque, hdr: ?*quic.lsxpack_header) callconv(.
     return 0;
 }
 
-fn timerCb(_: std.mem.Allocator, _: *Timer) !void {
+fn timerCb(_: std.mem.Allocator, _: std.Io, _: *Timer) !void {
     quic.lsquic_engine_process_conns(global_engine);
     quic.lsquic_engine_process_conns(global_client_engine);
 

@@ -1,11 +1,11 @@
 const std = @import("std");
 const zs = @import("zSockets");
 
-fn onWakeup(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onWakeup(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onPre(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onPost(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 fn onHttpSocketWritable(_: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
     return s;
@@ -35,14 +35,14 @@ fn onHttpSocketTimeout(_: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
     return s;
 }
 
-pub fn main(_: std.process.Init) !void {
+pub fn main(init: std.process.Init) !void {
     // var gpa = std.heap.DebugAllocator(.{}){};
     // defer std.debug.assert(gpa.deinit() == .ok);
     // const allocator = gpa.allocator();
 
     const allocator = std.heap.smp_allocator;
 
-    const loop = try zs.Loop.init(allocator, null, &onWakeup, &onPre, &onPost, null);
+    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, null);
     defer loop.deinit(allocator);
 
     // TODO: enable SSL and pass relevant options
@@ -60,7 +60,7 @@ pub fn main(_: std.process.Init) !void {
 
     if (http_context.listen(allocator, false, null, 3000, 0, null)) |_| {
         std.debug.print("Listening on port 3000...\n", .{});
-        try loop.run(allocator);
+        try loop.run(allocator, init.io);
     } else |_| {
         std.debug.print("Failed to listen!\n", .{});
     }

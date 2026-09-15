@@ -11,11 +11,11 @@ data: LoopData,
 gcd_queue: std.c.dispatch.queue_t,
 ext: Extension,
 
-pub fn init(allocator: std.mem.Allocator, _: ?*anyopaque, wakeup_cb: *const fn (std.mem.Allocator, *Self) anyerror!void, pre_cb: *const fn (std.mem.Allocator, *Self) anyerror!void, post_cb: *const fn (std.mem.Allocator, *Self) anyerror!void, comptime MaybeT: ?type) !*Self {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, _: ?*anyopaque, wakeup_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, pre_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, post_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, comptime MaybeT: ?type) !*Self {
     const self = try allocator.create(Self);
     errdefer allocator.destroy(self);
     self.* = .{
-        .data = try LoopData.init(allocator, self, wakeup_cb, pre_cb, post_cb),
+        .data = try LoopData.init(allocator, io, self, wakeup_cb, pre_cb, post_cb),
         .ext = try Extension.init(allocator, MaybeT),
         .gcd_queue = undefined,
     };

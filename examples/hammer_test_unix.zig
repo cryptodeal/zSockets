@@ -126,14 +126,14 @@ fn performRandomOperation(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Sock
     return s_;
 }
 
-fn onWakeup(_: std.mem.Allocator, _: *zs.Loop) !void {
+fn onWakeup(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {
     // TODO: call `zs.loop.timerSweep` to expose bugs
     // try zs.loop.internalTimerSweep(allocator, loop);
 }
 
-fn onPre(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onPost(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 fn onWebSocketWritable(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
     assumeState(s, false);
@@ -319,7 +319,7 @@ pub fn main(init: std.process.Init) !void {
     long_buffer = try allocator.alloc(u8, long_length);
     defer allocator.free(long_buffer);
 
-    const loop = try zs.Loop.init(allocator, null, &onWakeup, &onPre, &onPost, null);
+    const loop: *zs.Loop = try .init(allocator, init.io, null, &onWakeup, &onPre, &onPost, null);
     defer loop.deinit(allocator);
 
     // TODO: enable SSL and pass relevant options
@@ -360,7 +360,7 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("Running hammer test over unix domain socket\n", .{});
     try state.printProgress(0);
     _ = try nextConnection(allocator);
-    try loop.run(allocator);
+    try loop.run(allocator, init.io);
 
     try state.printProgress(1);
     std.debug.print("\n", .{});

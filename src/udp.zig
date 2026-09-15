@@ -17,6 +17,7 @@ pub const Socket = struct {
 
     pub fn init(
         allocator: std.mem.Allocator,
+        io: std.Io,
         loop: *Loop,
         buf: ?*PacketBuffer,
         data_cb: *const fn (std.mem.Allocator, *Socket, *PacketBuffer, usize) anyerror!void,
@@ -37,7 +38,8 @@ pub const Socket = struct {
         errdefer allocator.destroy(self);
         self.* = .{
             .cb = .{
-                .allocator = undefined,
+                .allocator = allocator,
+                .io = io,
                 .p = undefined,
                 .loop = loop,
                 .leave_poll_ready = true,
@@ -75,7 +77,7 @@ pub const Socket = struct {
     }
 };
 
-pub fn onUdpRead(allocator: std.mem.Allocator, s: *Socket) !void {
+pub fn onUdpRead(allocator: std.mem.Allocator, _: std.Io, s: *Socket) !void {
     const packets = try s.receive(s.receive_buf);
     try s.data_cb.?(allocator, s, s.receive_buf, packets);
 }

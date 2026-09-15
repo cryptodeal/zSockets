@@ -11,13 +11,13 @@ const Options = struct {
 var send_buf: *zs.udp.PacketBuffer = undefined;
 var messages: f64 = 0;
 
-fn onWakeup(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onWakeup(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onPre(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onPost(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn timerCb(_: std.mem.Allocator, _: *zs.Timer) !void {
+fn timerCb(_: std.mem.Allocator, _: std.Io, _: *zs.Timer) !void {
     std.debug.print("Messages per second: {d}\n", .{messages});
     messages = 0;
 }
@@ -75,7 +75,7 @@ pub fn main(init: std.process.Init) !void {
     send_buf = try zs.udp.PacketBuffer.init(allocator);
     defer send_buf.deinit(allocator);
 
-    const loop = try zs.Loop.init(allocator, null, &onWakeup, &onPre, &onPost, null);
+    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, null);
     defer loop.deinit(allocator);
 
     var server: ?*zs.udp.Socket = null;
@@ -88,15 +88,15 @@ pub fn main(init: std.process.Init) !void {
     }
     if (is_client) {
         if (is_ipv6) {
-            client = try zs.udp.Socket.init(allocator, loop, receive_buf, &onServerData, &onServerDrain, "::1", 0, null);
+            client = try zs.udp.Socket.init(allocator, init.io, loop, receive_buf, &onServerData, &onServerDrain, "::1", 0, null);
         } else {
-            client = try zs.udp.Socket.init(allocator, loop, receive_buf, &onServerData, &onServerDrain, "127.0.0.1", 0, null);
+            client = try zs.udp.Socket.init(allocator, init.io, loop, receive_buf, &onServerData, &onServerDrain, "127.0.0.1", 0, null);
         }
     } else {
         if (is_ipv6) {
-            server = try zs.udp.Socket.init(allocator, loop, receive_buf, &onServerData, &onServerDrain, "::1", 5678, null);
+            server = try zs.udp.Socket.init(allocator, init.io, loop, receive_buf, &onServerData, &onServerDrain, "::1", 5678, null);
         } else {
-            server = try zs.udp.Socket.init(allocator, loop, receive_buf, &onServerData, &onServerDrain, "127.0.0.1", 5678, null);
+            server = try zs.udp.Socket.init(allocator, init.io, loop, receive_buf, &onServerData, &onServerDrain, "127.0.0.1", 5678, null);
         }
     }
     if (server == null and client == null) {
@@ -126,8 +126,8 @@ pub fn main(init: std.process.Init) !void {
         };
         std.debug.print("Sent initial packets: {d}\n", .{sent});
     }
-    const timer = try zs.createTimer(allocator, loop, false, null);
+    const timer = try zs.createTimer(allocator, init.io, loop, false, null);
     defer zs.timerClose(allocator, timer);
     zs.timerSet(timer, &timerCb, 1000, 1000);
-    try loop.run(allocator);
+    try loop.run(allocator, init.io);
 }

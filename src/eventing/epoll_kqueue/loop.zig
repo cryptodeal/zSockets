@@ -33,7 +33,7 @@ fn setReadyPoll(self: *Self, index: u32, poll: ?*Poll) void {
 }
 
 // unused `hint: ?*anyopaque`
-pub fn init(allocator: std.mem.Allocator, _: ?*anyopaque, wakeup_cb: *const fn (std.mem.Allocator, *Self) anyerror!void, pre_cb: *const fn (std.mem.Allocator, *Self) anyerror!void, post_cb: *const fn (std.mem.Allocator, *Self) anyerror!void, comptime MaybeT: ?type) !*Self {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, _: ?*anyopaque, wakeup_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, pre_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, post_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, comptime MaybeT: ?type) !*Self {
     const self = try allocator.create(Self);
     errdefer allocator.destroy(self);
     self.* = .{
@@ -41,7 +41,7 @@ pub fn init(allocator: std.mem.Allocator, _: ?*anyopaque, wakeup_cb: *const fn (
         .fd = if (build_opts.event_backend == .epoll) @intCast(std.os.linux.epoll_create1(std.os.linux.EPOLL.CLOEXEC)) else std.c.kqueue(),
         .ext = try Extension.init(allocator, MaybeT),
     };
-    self.data = try LoopData.init(allocator, self, wakeup_cb, pre_cb, post_cb);
+    self.data = try LoopData.init(allocator, io, self, wakeup_cb, pre_cb, post_cb);
     return self;
 }
 
@@ -52,10 +52,10 @@ pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
     allocator.destroy(self);
 }
 
-pub fn run(self: *Self, allocator: std.mem.Allocator) !void {
+pub fn run(self: *Self, allocator: std.mem.Allocator, io: std.Io) !void {
     loop.integrate(self);
     while (self.polls_count != 0) {
-        try loop.pre(allocator, self);
+        try loop.pre(allocator, io, self);
         if (build_opts.event_backend == .epoll) {
             self.ready_polls_count = @intCast(std.os.linux.epoll_wait(self.fd, &self.ready_polls, 1024, -1));
         } else {
@@ -80,11 +80,11 @@ pub fn run(self: *Self, allocator: std.mem.Allocator) !void {
                 }
                 events &= p.events();
                 if (events != 0 or err != 0) {
-                    try loop.internalDispatchReadyPoll(allocator, p, err, events);
+                    try loop.internalDispatchReadyPoll(allocator, io, p, err, events);
                 }
             }
         }
-        try loop.post(allocator, self);
+        try loop.post(allocator, io, self);
     }
 }
 

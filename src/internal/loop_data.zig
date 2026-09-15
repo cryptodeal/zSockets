@@ -23,20 +23,20 @@ head: ?*SocketContext = null,
 iterator: ?*SocketContext = null,
 recv_buf: []u8,
 ssl_data: ?*anyopaque = null,
-pre_cb: *const fn (std.mem.Allocator, *Loop) anyerror!void,
-post_cb: *const fn (std.mem.Allocator, *Loop) anyerror!void,
+pre_cb: *const fn (std.mem.Allocator, std.Io, *Loop) anyerror!void,
+post_cb: *const fn (std.mem.Allocator, std.Io, *Loop) anyerror!void,
 closed_head: ?*Socket = null,
 low_priority_head: ?*Socket = null,
 low_priority_budget: i32 = 0,
 iteration_count: i64 = 0,
 
-pub fn init(allocator: std.mem.Allocator, loop: *Loop, wakeup_cb: *const fn (std.mem.Allocator, *Loop) anyerror!void, pre_cb: *const fn (std.mem.Allocator, *Loop) anyerror!void, post_cb: *const fn (std.mem.Allocator, *Loop) anyerror!void) !Self {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, wakeup_cb: *const fn (std.mem.Allocator, std.Io, *Loop) anyerror!void, pre_cb: *const fn (std.mem.Allocator, std.Io, *Loop) anyerror!void, post_cb: *const fn (std.mem.Allocator, std.Io, *Loop) anyerror!void) !Self {
     const self: Self = .{
-        .sweep_timer = try createTimer(allocator, loop, true, null),
+        .sweep_timer = try createTimer(allocator, io, loop, true, null),
         .recv_buf = try allocator.alloc(u8, constants.recv_buffer_length + constants.recv_buffer_padding * 2),
         .pre_cb = pre_cb,
         .post_cb = post_cb,
-        .wakeup_async = try createAsync(allocator, loop, true, null),
+        .wakeup_async = try createAsync(allocator, io, loop, true, null),
     };
     asyncSet(self.wakeup_async.?, @ptrCast(@alignCast(wakeup_cb)));
     return self;

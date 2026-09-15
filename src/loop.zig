@@ -114,7 +114,7 @@ fn freeClosedSockets(allocator: std.mem.Allocator, loop: *Loop) void {
     }
 }
 
-fn sweepTimerCb(allocator: std.mem.Allocator, cb: *InternalCallback) !void {
+fn sweepTimerCb(allocator: std.mem.Allocator, _: std.Io, cb: *InternalCallback) !void {
     try internalTimerSweep(allocator, cb.loop);
 }
 
@@ -122,15 +122,15 @@ fn loopIterationNumber(loop: *const Loop) i64 {
     return loop.data.iteration_count;
 }
 
-pub fn pre(allocator: std.mem.Allocator, loop: *Loop) !void {
+pub fn pre(allocator: std.mem.Allocator, io: std.Io, loop: *Loop) !void {
     loop.data.iteration_count += 1;
     handleLowPrioritySockets(loop);
-    try loop.data.pre_cb(allocator, loop);
+    try loop.data.pre_cb(allocator, io, loop);
 }
 
-pub fn post(allocator: std.mem.Allocator, loop: *Loop) !void {
+pub fn post(allocator: std.mem.Allocator, io: std.Io, loop: *Loop) !void {
     freeClosedSockets(allocator, loop);
-    try loop.data.post_cb(allocator, loop);
+    try loop.data.post_cb(allocator, io, loop);
 }
 
 // TODO: unused parameter is `ssl: bool` for future SSL support
@@ -145,7 +145,7 @@ pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, ssl: bool, context: *So
     return res;
 }
 
-pub fn internalDispatchReadyPoll(allocator: std.mem.Allocator, p: *Poll, err: u32, events: u32) !void {
+pub fn internalDispatchReadyPoll(allocator: std.mem.Allocator, io: std.Io, p: *Poll, err: u32, events: u32) !void {
     outer: switch (p.pollType()) {
         .callback => {
             const cb: *InternalCallback = @fieldParentPtr("p", p);
@@ -154,7 +154,7 @@ pub fn internalDispatchReadyPoll(allocator: std.mem.Allocator, p: *Poll, err: u3
                     _ = p.acceptEvent();
                 }
             }
-            try cb.cb.?(allocator, if (cb.expects_loop) @ptrCast(@alignCast(cb.loop)) else cb);
+            try cb.cb.?(allocator, io, if (cb.expects_loop) @ptrCast(@alignCast(cb.loop)) else cb);
         },
         .semi_socket => {
             if (p.events() == socket_writable) {

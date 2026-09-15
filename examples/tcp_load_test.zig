@@ -18,14 +18,14 @@ var connections: usize = undefined;
 
 var responses: usize = undefined;
 
-fn onWakeup(_: std.mem.Allocator, _: *zs.Loop) !void {
+fn onWakeup(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {
     // call `zs.loop.timerSweep` to expose bugs
     // try zs.loop.internalTimerSweep(allocator, loop);
 }
 
-fn onPre(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onPost(_: std.mem.Allocator, _: *zs.Loop) !void {}
+fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 fn onHttpSocketWritable(_: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
     return s;
@@ -90,7 +90,7 @@ pub fn main(init: std.process.Init) !void {
     port = args.options.port;
     connections = args.options.connections;
 
-    const loop = try zs.Loop.init(allocator, null, &onWakeup, &onPre, &onPost, null);
+    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, null);
     defer loop.deinit(allocator);
 
     // TODO: enable SSL and pass relevant options
@@ -113,5 +113,5 @@ pub fn main(init: std.process.Init) !void {
         return err;
     }
 
-    try loop.run(allocator);
+    try loop.run(allocator, init.io);
 }
