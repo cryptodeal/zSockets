@@ -12,7 +12,7 @@ copy_to_cb: ?*const fn (*anyopaque, []u8) void = null,
 pub fn init(allocator: std.mem.Allocator, comptime MaybeT: ?type) !Self {
     var self: Self = .{};
     if (MaybeT) |T| {
-        self.ptr = try allocator.create(T);
+        self.ptr = @ptrCast(@alignCast(try allocator.create(T)));
         self.create_cb = (struct {
             const CallbackT = T;
             pub fn call(a: std.mem.Allocator) !*anyopaque {
