@@ -10,8 +10,8 @@ pub const PacketBuffer = bsd.PacketBuffer;
 pub const Socket = struct {
     cb: InternalCallback,
     receive_buf: *PacketBuffer,
-    data_cb: ?*const fn (std.mem.Allocator, *Socket, *PacketBuffer, usize) anyerror!void = null,
-    drain_cb: ?*const fn (std.mem.Allocator, *Socket) anyerror!void = null,
+    data_cb: ?*const fn (std.mem.Allocator, std.Io, *Socket, *PacketBuffer, usize) anyerror!void = null,
+    drain_cb: ?*const fn (std.mem.Allocator, std.Io, *Socket) anyerror!void = null,
     user: ?*anyopaque = null,
     port: u32,
 
@@ -20,8 +20,8 @@ pub const Socket = struct {
         io: std.Io,
         loop: *Loop,
         buf: ?*PacketBuffer,
-        data_cb: *const fn (std.mem.Allocator, *Socket, *PacketBuffer, usize) anyerror!void,
-        drain_cb: *const fn (std.mem.Allocator, *Socket) anyerror!void,
+        data_cb: *const fn (std.mem.Allocator, std.Io, *Socket, *PacketBuffer, usize) anyerror!void,
+        drain_cb: *const fn (std.mem.Allocator, std.Io, *Socket) anyerror!void,
         host: [:0]const u8,
         port: u32,
         user: ?*anyopaque,
@@ -53,7 +53,7 @@ pub const Socket = struct {
         };
         std.debug.print("The port of UDP is: {d}\n", .{self.port});
         // `errdefer` is not necessary as we don't allocate anything for the poll here (extension is `null`)
-        try self.cb.p.create(allocator, loop, false, null);
+        try self.cb.p.create(allocator, io, loop, false, null);
         self.cb.p.init(fd, .callback);
         self.cb.p.start(self.cb.loop, socket_readable);
         return self;
@@ -77,7 +77,7 @@ pub const Socket = struct {
     }
 };
 
-pub fn onUdpRead(allocator: std.mem.Allocator, _: std.Io, s: *Socket) !void {
+pub fn onUdpRead(allocator: std.mem.Allocator, io: std.Io, s: *Socket) !void {
     const packets = try s.receive(s.receive_buf);
-    try s.data_cb.?(allocator, s, s.receive_buf, packets);
+    try s.data_cb.?(allocator, io, s, s.receive_buf, packets);
 }

@@ -22,9 +22,9 @@ fn timerCb(_: std.mem.Allocator, _: std.Io, _: *zs.Timer) !void {
     messages = 0;
 }
 
-fn onServerDrain(_: std.mem.Allocator, _: *zs.udp.Socket) !void {}
+fn onServerDrain(_: std.mem.Allocator, _: std.Io, _: *zs.udp.Socket) !void {}
 
-fn onServerData(_: std.mem.Allocator, s: *zs.udp.Socket, buf: *zs.udp.PacketBuffer, packets: usize) !void {
+fn onServerData(_: std.mem.Allocator, _: std.Io, s: *zs.udp.Socket, buf: *zs.udp.PacketBuffer, packets: usize) !void {
     for (0..packets) |i| {
         const payload = buf.payload(i);
         // _ = buf.ecn(i);

@@ -44,38 +44,38 @@ pub fn isLowPriority(_: *Socket) LowPriorityQueueState {
     return .not_queued;
 }
 
-pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, socket: *Socket, context: *SocketContext, accepted_fd: std.posix.fd_t, addr_ip: []u8, extension: Extension) !void {
+pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, io: std.Io, socket: *Socket, context: *SocketContext, accepted_fd: std.posix.fd_t, addr_ip: []u8, extension: Extension) !void {
     socket.* = .{
         .context = context,
         .ext = try extension.dupe(allocator),
     };
-    try socket.p.create(allocator, context.loop, false, null);
+    try socket.p.create(allocator, io, context.loop, false, null);
     socket.p.init(accepted_fd, .socket);
     socket.p.start(context.loop, socket_readable);
     bsd.socketNoDelay(accepted_fd, true);
     context.linkSocket(socket);
-    _ = try context.on_open(allocator, socket, false, addr_ip);
+    _ = try context.on_open(allocator, io, socket, false, addr_ip);
 }
 
-pub fn connect(allocator: std.mem.Allocator, context: *SocketContext, socket: *Socket, host: [:0]const u8, port: u32, source_host: ?[:0]const u8, options: u32, comptime ExtensionT: ?type) !void {
+pub fn connect(allocator: std.mem.Allocator, io: std.Io, context: *SocketContext, socket: *Socket, host: [:0]const u8, port: u32, source_host: ?[:0]const u8, options: u32, comptime ExtensionT: ?type) !void {
     const connect_socket_fd = try bsd.createConnectSocket(host, port, source_host, options);
     socket.* = .{
         .context = context,
         .ext = try Extension.init(allocator, ExtensionT),
     };
-    try socket.p.create(allocator, context.loop, false, null);
+    try socket.p.create(allocator, io, context.loop, false, null);
     socket.p.init(connect_socket_fd, .semi_socket);
     socket.p.start(context.loop, socket_writable);
     context.linkSocket(socket);
 }
 
-pub fn connectUnix(allocator: std.mem.Allocator, context: *SocketContext, socket: *Socket, server_path: [:0]const u8, options: u32, comptime ExtensionT: ?type) !void {
+pub fn connectUnix(allocator: std.mem.Allocator, io: std.Io, context: *SocketContext, socket: *Socket, server_path: [:0]const u8, options: u32, comptime ExtensionT: ?type) !void {
     const connect_socket_fd = try bsd.createConnectSocketUnix(server_path, options);
     socket.* = .{
         .context = context,
         .ext = try Extension.init(allocator, ExtensionT),
     };
-    try socket.p.create(allocator, context.loop, false, null);
+    try socket.p.create(allocator, io, context.loop, false, null);
     socket.p.init(connect_socket_fd, .semi_socket);
     socket.p.start(context.loop, socket_writable);
     context.linkSocket(socket);

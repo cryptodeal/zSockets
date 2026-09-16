@@ -15,7 +15,7 @@ fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onEchoSocketWritable(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onEchoSocketWritable(allocator: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
     const es = s.getExt(EchoSocket).?;
     const written = s.write(ssl, es.backpressure, false);
     if (written != es.backpressure.len) {
@@ -31,19 +31,19 @@ fn onEchoSocketWritable(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket
     return s;
 }
 
-fn onEchoSocketClose(allocator: std.mem.Allocator, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
+fn onEchoSocketClose(allocator: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
     const es = s.getExt(EchoSocket).?;
     std.debug.print("Client disconnected\n", .{});
     allocator.free(es.backpressure);
     return s;
 }
 
-fn onEchoSocketEnd(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onEchoSocketEnd(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
     s.shutdown(ssl);
-    return s.close(allocator, ssl, 0, null);
+    return s.close(allocator, io, ssl, 0, null);
 }
 
-fn onEchoSocketData(allocator: std.mem.Allocator, s: *zs.Socket, data: []u8) !*zs.Socket {
+fn onEchoSocketData(allocator: std.mem.Allocator, _: std.Io, s: *zs.Socket, data: []u8) !*zs.Socket {
     const es = s.getExt(EchoSocket).?;
     std.debug.print("Client sent: {s}", .{data});
     const written = s.write(ssl, data, false);
@@ -58,7 +58,7 @@ fn onEchoSocketData(allocator: std.mem.Allocator, s: *zs.Socket, data: []u8) !*z
     return s;
 }
 
-fn onEchoSocketOpen(_: std.mem.Allocator, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
+fn onEchoSocketOpen(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
     const es = s.getExt(EchoSocket).?;
     es.backpressure = &[_]u8{};
     s.setTimeout(ssl, 30);
@@ -66,9 +66,9 @@ fn onEchoSocketOpen(_: std.mem.Allocator, s: *zs.Socket, _: bool, _: []u8) !*zs.
     return s;
 }
 
-fn onEchoSocketTimeout(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onEchoSocketTimeout(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
     std.debug.print("Client was idle for too long\n", .{});
-    return s.close(allocator, ssl, 0, null);
+    return s.close(allocator, io, ssl, 0, null);
 }
 
 pub fn main(init: std.process.Init) !void {
@@ -98,7 +98,7 @@ pub fn main(init: std.process.Init) !void {
     echo_context.setOnTimeout(ssl, &onEchoSocketTimeout);
     echo_context.setOnEnd(ssl, &onEchoSocketEnd);
 
-    if (echo_context.listen(allocator, ssl, null, 3000, 0, EchoSocket)) |_| {
+    if (echo_context.listen(allocator, init.io, ssl, null, 3000, 0, EchoSocket)) |_| {
         std.debug.print("Listening on port 3000...\n", .{});
         try loop.run(allocator, init.io);
     } else |_| {

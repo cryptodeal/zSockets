@@ -34,20 +34,21 @@ pub const SocketContext = struct {
 
     // stash user provided allocator here for use in callbacks
     allocator: std.mem.Allocator,
+    io: std.Io,
     recv_buf: ?*anyopaque = null,
     outgoing_packets: u32 = undefined,
     loop: *Loop,
     engine: ?*quic.lsquic_engine_t = null,
     client_engine: ?*quic.lsquic_engine_t = null,
     options: Options,
-    on_stream_data: ?*const fn (std.mem.Allocator, ?*anyopaque, []u8) anyerror!void = null,
-    on_stream_end: ?*const fn (std.mem.Allocator, ?*anyopaque) anyerror!void = null,
-    on_stream_headers: ?*const fn (std.mem.Allocator, ?*anyopaque) anyerror!void = null,
-    on_stream_open: ?*const fn (std.mem.Allocator, ?*anyopaque, bool) anyerror!void = null,
-    on_stream_close: ?*const fn (std.mem.Allocator, ?*anyopaque) anyerror!void = null,
-    on_stream_writable: ?*const fn (std.mem.Allocator, ?*anyopaque) anyerror!void = null,
-    on_open: ?*const fn (std.mem.Allocator, *Socket, bool) anyerror!void = null,
-    on_close: ?*const fn (std.mem.Allocator, *Socket) anyerror!void = null,
+    on_stream_data: ?*const fn (std.mem.Allocator, std.Io, ?*anyopaque, []u8) anyerror!void = null,
+    on_stream_end: ?*const fn (std.mem.Allocator, std.Io, ?*anyopaque) anyerror!void = null,
+    on_stream_headers: ?*const fn (std.mem.Allocator, std.Io, ?*anyopaque) anyerror!void = null,
+    on_stream_open: ?*const fn (std.mem.Allocator, std.Io, ?*anyopaque, bool) anyerror!void = null,
+    on_stream_close: ?*const fn (std.mem.Allocator, std.Io, ?*anyopaque) anyerror!void = null,
+    on_stream_writable: ?*const fn (std.mem.Allocator, std.Io, ?*anyopaque) anyerror!void = null,
+    on_open: ?*const fn (std.mem.Allocator, std.Io, *Socket, bool) anyerror!void = null,
+    on_close: ?*const fn (std.mem.Allocator, std.Io, *Socket) anyerror!void = null,
     ext: Extension = .{},
 
     // static values
@@ -77,6 +78,7 @@ pub const SocketContext = struct {
         errdefer allocator.destroy(self);
         self.* = .{
             .allocator = allocator,
+            .io = io,
             .recv_buf = try udp.PacketBuffer.init(allocator),
             .loop = loop,
             .options = options,
@@ -119,35 +121,35 @@ pub const SocketContext = struct {
         return self;
     }
 
-    pub fn setOnStreamData(self: *SocketContext, cb: *const fn (std.mem.Allocator, ?*anyopaque, []u8) anyerror!void) void {
+    pub fn setOnStreamData(self: *SocketContext, cb: *const fn (std.mem.Allocator, std.Io, ?*anyopaque, []u8) anyerror!void) void {
         self.on_stream_data = cb;
     }
 
-    pub fn setOnStreamEnd(self: *SocketContext, cb: *const fn (std.mem.Allocator, ?*anyopaque) anyerror!void) void {
+    pub fn setOnStreamEnd(self: *SocketContext, cb: *const fn (std.mem.Allocator, std.Io, ?*anyopaque) anyerror!void) void {
         self.on_stream_end = cb;
     }
 
-    pub fn setOnStreamHeaders(self: *SocketContext, cb: *const fn (std.mem.Allocator, ?*anyopaque) anyerror!void) void {
+    pub fn setOnStreamHeaders(self: *SocketContext, cb: *const fn (std.mem.Allocator, std.Io, ?*anyopaque) anyerror!void) void {
         self.on_stream_headers = cb;
     }
 
-    pub fn setOnStreamOpen(self: *SocketContext, cb: *const fn (std.mem.Allocator, ?*anyopaque, bool) anyerror!void) void {
+    pub fn setOnStreamOpen(self: *SocketContext, cb: *const fn (std.mem.Allocator, std.Io, ?*anyopaque, bool) anyerror!void) void {
         self.on_stream_open = cb;
     }
 
-    pub fn setOnStreamClose(self: *SocketContext, cb: *const fn (std.mem.Allocator, ?*anyopaque) anyerror!void) void {
+    pub fn setOnStreamClose(self: *SocketContext, cb: *const fn (std.mem.Allocator, std.Io, ?*anyopaque) anyerror!void) void {
         self.on_stream_close = cb;
     }
 
-    pub fn setOnStreamWritable(self: *SocketContext, cb: *const fn (std.mem.Allocator, ?*anyopaque) anyerror!void) void {
+    pub fn setOnStreamWritable(self: *SocketContext, cb: *const fn (std.mem.Allocator, std.Io, ?*anyopaque) anyerror!void) void {
         self.on_stream_writable = cb;
     }
 
-    pub fn setOnOpen(self: *SocketContext, cb: *const fn (std.mem.Allocator, *Socket, bool) anyerror!void) void {
+    pub fn setOnOpen(self: *SocketContext, cb: *const fn (std.mem.Allocator, std.Io, *Socket, bool) anyerror!void) void {
         self.on_open = cb;
     }
 
-    pub fn setOnClose(self: *SocketContext, cb: *const fn (std.mem.Allocator, *Socket) anyerror!void) void {
+    pub fn setOnClose(self: *SocketContext, cb: *const fn (std.mem.Allocator, std.Io, *Socket) anyerror!void) void {
         self.on_close = cb;
     }
 
@@ -204,12 +206,12 @@ pub const SocketContext = struct {
     }
 };
 
-fn onUdpSocketWritable(_: std.mem.Allocator, s: *udp.Socket) !void {
+fn onUdpSocketWritable(_: std.mem.Allocator, _: std.Io, s: *udp.Socket) !void {
     const context: *SocketContext = @ptrCast(@alignCast(s.user));
     quic.lsquic_engine_send_unsent_packets(context.engine);
 }
 
-pub fn onUdpSocketDataClient(_: std.mem.Allocator, s: *udp.Socket, buf: *udp.PacketBuffer, packets: usize) !void {
+pub fn onUdpSocketDataClient(_: std.mem.Allocator, _: std.Io, s: *udp.Socket, buf: *udp.PacketBuffer, packets: usize) !void {
     const context: *SocketContext = @ptrCast(@alignCast(s.user));
     for (0..packets) |i| {
         const payload = buf.payload(i);
@@ -239,7 +241,7 @@ pub fn onUdpSocketDataClient(_: std.mem.Allocator, s: *udp.Socket, buf: *udp.Pac
     quic.lsquic_engine_process_conns(context.client_engine);
 }
 
-fn onUdpSocketData(_: std.mem.Allocator, s: *udp.Socket, buf: *udp.PacketBuffer, packets: usize) !void {
+fn onUdpSocketData(_: std.mem.Allocator, _: std.Io, s: *udp.Socket, buf: *udp.PacketBuffer, packets: usize) !void {
     const context: *SocketContext = @ptrCast(@alignCast(s.user));
     quic.lsquic_engine_process_conns(context.engine);
     for (0..packets) |i| {
@@ -323,7 +325,7 @@ fn onNewConn(stream_if_ctx: ?*anyopaque, c: ?*quic.lsquic_conn_t) callconv(.c) ?
     if (quic.lsquic_conn_get_engine(c) == context.client_engine) {
         is_client = true;
     }
-    context.on_open.?(context.allocator, @ptrCast(@alignCast(c)), is_client) catch |err| {
+    context.on_open.?(context.allocator, context.io, @ptrCast(@alignCast(c)), is_client) catch |err| {
         std.debug.print("onNewConn Error: {s}\n", .{@errorName(err)});
         std.debug.dumpCurrentStackTrace(.{});
     };
@@ -333,7 +335,7 @@ fn onNewConn(stream_if_ctx: ?*anyopaque, c: ?*quic.lsquic_conn_t) callconv(.c) ?
 fn onConnClosed(c: ?*quic.lsquic_conn_t) callconv(.c) void {
     const context: *SocketContext = @ptrCast(@alignCast(quic.lsquic_conn_get_ctx(c)));
     std.debug.print("onConnClose\n", .{});
-    context.on_close.?(context.allocator, @ptrCast(@alignCast(c))) catch |err| {
+    context.on_close.?(context.allocator, context.io, @ptrCast(@alignCast(c))) catch |err| {
         std.debug.print("onConnClose Error: {s}\n", .{@errorName(err)});
         std.debug.dumpCurrentStackTrace(.{});
     };
@@ -356,7 +358,7 @@ fn onNewStream(stream_if_ctx: ?*anyopaque, s: ?*quic.lsquic_stream_t) callconv(.
         is_client = true;
     }
     quic.lsquic_stream_set_ctx(s, @ptrCast(ext.ptr));
-    context.on_stream_open.?(context.allocator, s, is_client) catch |err| {
+    context.on_stream_open.?(context.allocator, context.io, s, is_client) catch |err| {
         std.debug.print("onNewStream Error: {s}\n", .{@errorName(err)});
         std.debug.dumpCurrentStackTrace(.{});
     };
@@ -399,7 +401,7 @@ fn onRead(s: ?*quic.lsquic_stream_t, _: ?*quic.lsquic_stream_ctx_t) callconv(.c)
     const context: *SocketContext = @ptrCast(@alignCast(quic.lsquic_conn_get_ctx(quic.lsquic_stream_conn(s))));
     const header_set = quic.lsquic_stream_get_hset(s);
     if (header_set) |_| {
-        context.on_stream_headers.?(context.allocator, s) catch |err| {
+        context.on_stream_headers.?(context.allocator, context.io, s) catch |err| {
             std.debug.print("onRead Error: {s}\n", .{@errorName(err)});
             std.debug.dumpCurrentStackTrace(.{});
         };
@@ -409,7 +411,7 @@ fn onRead(s: ?*quic.lsquic_stream_t, _: ?*quic.lsquic_stream_ctx_t) callconv(.c)
     const nr = quic.lsquic_stream_read(s, &temp, 4096);
     if (nr == 0) {
         _ = quic.lsquic_stream_wantread(s, 0);
-        context.on_stream_end.?(context.allocator, s) catch |err| {
+        context.on_stream_end.?(context.allocator, context.io, s) catch |err| {
             std.debug.print("onRead Error: {s}\n", .{@errorName(err)});
             std.debug.dumpCurrentStackTrace(.{});
         };
@@ -420,7 +422,7 @@ fn onRead(s: ?*quic.lsquic_stream_t, _: ?*quic.lsquic_stream_ctx_t) callconv(.c)
             std.process.exit(0);
         }
     } else {
-        context.on_stream_data.?(context.allocator, s, temp[0..@intCast(nr)]) catch |err| {
+        context.on_stream_data.?(context.allocator, context.io, s, temp[0..@intCast(nr)]) catch |err| {
             std.debug.print("onRead Error: {s}\n", .{@errorName(err)});
             std.debug.dumpCurrentStackTrace(.{});
         };
@@ -440,7 +442,7 @@ pub fn streamWrite(s: ?*anyopaque, data: []u8) usize {
 
 fn onWrite(s: ?*quic.lsquic_stream_t, _: ?*quic.lsquic_stream_ctx_t) callconv(.c) void {
     const context: *SocketContext = @ptrCast(@alignCast(quic.lsquic_conn_get_ctx(quic.lsquic_stream_conn(s))));
-    context.on_stream_writable.?(context.allocator, s) catch |err| {
+    context.on_stream_writable.?(context.allocator, context.io, s) catch |err| {
         std.debug.print("onWrite Error: {s}\n", .{@errorName(err)});
         std.debug.dumpCurrentStackTrace(.{});
     };

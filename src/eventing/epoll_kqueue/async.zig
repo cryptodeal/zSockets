@@ -10,7 +10,7 @@ pub fn createAsync(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallth
     if (build_opts.event_backend == .epoll) {
         const cb = try InternalCallback.init(allocator, io, loop, MaybeT);
         errdefer cb.deinit(allocator);
-        try cb.p.create(allocator, loop, fallthrough, null);
+        try cb.p.create(allocator, io, loop, fallthrough, null);
         cb.p.init(@intCast(std.os.linux.eventfd(0, std.os.linux.EFD.NONBLOCK | std.os.linux.EFD.CLOEXEC)), .callback);
         cb.expects_loop = true;
         return cb;

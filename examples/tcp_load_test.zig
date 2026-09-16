@@ -27,29 +27,29 @@ fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onHttpSocketWritable(_: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onHttpSocketWritable(_: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
     return s;
 }
 
-fn onHttpSocketClose(_: std.mem.Allocator, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
+fn onHttpSocketClose(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
     return s;
 }
 
-fn onHttpSocketEnd(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
-    return s.close(allocator, ssl, 0, null);
+fn onHttpSocketEnd(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
+    return s.close(allocator, io, ssl, 0, null);
 }
 
-fn onHttpSocketData(_: std.mem.Allocator, s: *zs.Socket, _: []u8) !*zs.Socket {
+fn onHttpSocketData(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: []u8) !*zs.Socket {
     _ = s.write(ssl, request, false);
     responses += 1;
     return s;
 }
 
-fn onHttpSocketOpen(allocator: std.mem.Allocator, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
+fn onHttpSocketOpen(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
     _ = s.write(ssl, request, false);
     connections -= 1;
     if (connections != 0) {
-        _ = try s.context.connect(allocator, ssl, host, port, null, 0, null);
+        _ = try s.context.connect(allocator, io, ssl, host, port, null, 0, null);
     } else {
         std.debug.print("Running benchmark now...\n", .{});
         s.setTimeout(ssl, zs.constants.timeout_granularity);
@@ -58,20 +58,20 @@ fn onHttpSocketOpen(allocator: std.mem.Allocator, s: *zs.Socket, _: bool, _: []u
     return s;
 }
 
-fn onHttpSocketLongTimeout(_: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onHttpSocketLongTimeout(_: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
     std.debug.print("--- Minute mark ---\n", .{});
     s.setLongTimeout(ssl, 1);
     return s;
 }
 
-fn onHttpSocketTimeout(_: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onHttpSocketTimeout(_: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
     std.debug.print("Req/sec: {d}\n", .{@as(f64, @floatFromInt(responses)) / zs.constants.timeout_granularity});
     responses = 0;
     s.setTimeout(ssl, zs.constants.timeout_granularity);
     return s;
 }
 
-fn onHttpSocketConnectError(_: std.mem.Allocator, s: *zs.Socket, _: i32) !*zs.Socket {
+fn onHttpSocketConnectError(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: i32) !*zs.Socket {
     std.debug.print("Cannot connect to server\n", .{});
     return s;
 }
@@ -108,7 +108,7 @@ pub fn main(init: std.process.Init) !void {
     http_context.setOnEnd(ssl, &onHttpSocketEnd);
     http_context.setOnConnectError(ssl, &onHttpSocketConnectError);
 
-    if (http_context.connect(allocator, ssl, host, port, null, 0, null)) |_| {} else |err| {
+    if (http_context.connect(allocator, init.io, ssl, host, port, null, 0, null)) |_| {} else |err| {
         std.debug.print("Cannot connect to server\n", .{});
         return err;
     }

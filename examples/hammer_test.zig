@@ -92,10 +92,10 @@ const HttpContext = struct {
     content: [1]u8,
 };
 
-fn performRandomOperation(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn performRandomOperation(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
     var s_ = s;
     switch (rand.int(u32) % 5) {
-        0 => return s_.close(allocator, ssl, 0, null),
+        0 => return s_.close(allocator, io, ssl, 0, null),
         1 => {
             if (!s_.isClosed(ssl)) {
                 if ((rand.int(u32) % 2) != 0) {
@@ -108,7 +108,7 @@ fn performRandomOperation(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Sock
                     hs.is_http = true;
                 }
             }
-            return performRandomOperation(allocator, s_);
+            return performRandomOperation(allocator, io, s_);
         },
         2 => {
             _ = s_.write(ssl, long_buffer[0 .. rand.int(usize) % long_length], false);
@@ -135,17 +135,17 @@ fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onWebSocketWritable(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onWebSocketWritable(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
     assumeState(s, false);
-    return performRandomOperation(allocator, s);
+    return performRandomOperation(allocator, io, s);
 }
 
-fn onHttpSocketWritable(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onHttpSocketWritable(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
     assumeState(s, true);
-    return performRandomOperation(allocator, s);
+    return performRandomOperation(allocator, io, s);
 }
 
-fn onWebSocketClose(allocator: std.mem.Allocator, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
+fn onWebSocketClose(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
     assumeState(s, false);
     const ws: *WebSocket = s.getExt(WebSocket).?;
     if (ws.is_client) {
@@ -162,12 +162,12 @@ fn onWebSocketClose(allocator: std.mem.Allocator, s: *zs.Socket, _: i32, _: ?*an
         }
         listen_socket.close(ssl);
     } else {
-        return performRandomOperation(allocator, s);
+        return performRandomOperation(allocator, io, s);
     }
     return s;
 }
 
-fn onHttpSocketClose(allocator: std.mem.Allocator, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
+fn onHttpSocketClose(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
     assumeState(s, true);
     const hs: *HttpSocket = s.getExt(HttpSocket).?;
     if (hs.is_client) {
@@ -184,55 +184,55 @@ fn onHttpSocketClose(allocator: std.mem.Allocator, s: *zs.Socket, _: i32, _: ?*a
         }
         listen_socket.close(ssl);
     } else {
-        return performRandomOperation(allocator, s);
+        return performRandomOperation(allocator, io, s);
     }
     return s;
 }
 
-fn onWebSocketEnd(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onWebSocketEnd(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
     var s_ = s;
     assumeState(s_, false);
-    s_ = try s_.close(allocator, ssl, 0, null);
-    return performRandomOperation(allocator, s_);
+    s_ = try s_.close(allocator, io, ssl, 0, null);
+    return performRandomOperation(allocator, io, s_);
 }
 
-fn onHttpSocketEnd(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onHttpSocketEnd(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
     var s_ = s;
     assumeState(s_, true);
-    s_ = try s_.close(allocator, ssl, 0, null);
-    return performRandomOperation(allocator, s_);
+    s_ = try s_.close(allocator, io, ssl, 0, null);
+    return performRandomOperation(allocator, io, s_);
 }
 
-fn onWebSocketData(allocator: std.mem.Allocator, s: *zs.Socket, data: []u8) !*zs.Socket {
+fn onWebSocketData(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, data: []u8) !*zs.Socket {
     assumeState(s, false);
     if (data.len == 0) {
         std.debug.print("ERROR: Got data event with no data\n", .{});
         std.c.exit(-1);
     }
-    return performRandomOperation(allocator, s);
+    return performRandomOperation(allocator, io, s);
 }
 
-fn onHttpSocketData(allocator: std.mem.Allocator, s: *zs.Socket, data: []u8) !*zs.Socket {
+fn onHttpSocketData(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, data: []u8) !*zs.Socket {
     assumeState(s, true);
     if (data.len == 0) {
         std.debug.print("ERROR: Got data event with no data\n", .{});
         std.c.exit(-1);
     }
-    return performRandomOperation(allocator, s);
+    return performRandomOperation(allocator, io, s);
 }
 
-fn onWebSocketOpen(_: std.mem.Allocator, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
+fn onWebSocketOpen(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
     std.debug.print("ERROR: `onWebSocketOpen` called!\n", .{});
     std.c.exit(-2);
     return s;
 }
 
-fn nextConnection(allocator: std.mem.Allocator) !*zs.Socket {
+fn nextConnection(allocator: std.mem.Allocator, io: std.Io) !*zs.Socket {
     if (opened_clients == 5000) {
         std.debug.print("ERROR! next_connection called when already having made all!\n", .{});
         std.c.abort();
     }
-    if (http_context.connect(allocator, ssl, "127.0.0.1", 3000, null, 0, HttpSocket)) |connection_socket| {
+    if (http_context.connect(allocator, io, ssl, "127.0.0.1", 3000, null, 0, HttpSocket)) |connection_socket| {
         return connection_socket;
     } else |_| {
         std.debug.print("FAILED TO START CONNECTION, WILL EXIT NOW\n", .{});
@@ -240,18 +240,18 @@ fn nextConnection(allocator: std.mem.Allocator) !*zs.Socket {
     }
 }
 
-fn onHttpSocketConnectError(allocator: std.mem.Allocator, s: *zs.Socket, _: i32) !*zs.Socket {
-    _ = try nextConnection(allocator);
+fn onHttpSocketConnectError(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, _: i32) !*zs.Socket {
+    _ = try nextConnection(allocator, io);
     return s;
 }
 
-fn onWebSocketConnectError(_: std.mem.Allocator, s: *zs.Socket, _: i32) !*zs.Socket {
+fn onWebSocketConnectError(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: i32) !*zs.Socket {
     std.debug.print("ERROR: WebSocket can never get connect errors!\n", .{});
     std.c.exit(1);
     return s;
 }
 
-fn onHttpSocketOpen(allocator: std.mem.Allocator, s: *zs.Socket, is_client: bool, _: []u8) !*zs.Socket {
+fn onHttpSocketOpen(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, is_client: bool, _: []u8) !*zs.Socket {
     const hs = s.getExt(HttpSocket).?;
     hs.is_http = true;
     hs.pad_invariant = pad_should_always_be;
@@ -265,26 +265,26 @@ fn onHttpSocketOpen(allocator: std.mem.Allocator, s: *zs.Socket, is_client: bool
         opened_servers += 1;
     }
     if (is_client and opened_clients < 5000) {
-        _ = try nextConnection(allocator);
+        _ = try nextConnection(allocator, io);
     }
-    return performRandomOperation(allocator, s);
+    return performRandomOperation(allocator, io, s);
 }
 
-fn onWebSocketTimeout(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onWebSocketTimeout(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
     assumeState(s, false);
-    return performRandomOperation(allocator, s);
+    return performRandomOperation(allocator, io, s);
 }
 
 var last_time: ?std.Io.Timestamp = null;
 
-fn onHttpSocketTimeout(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onHttpSocketTimeout(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
     if (!s.isEstablished(ssl)) {
         if (s != @as(*zs.Socket, @ptrCast(@alignCast(listen_socket)))) {
             std.debug.print("CONNECTION TIMEOUT!!! CANNOT HAPPEN!!\n", .{});
             std.c.exit(1);
             // would be valid to do the following, but we care about count (see uSockets original code)
             _ = s.closeConnecting(ssl);
-            _ = try nextConnection(allocator);
+            _ = try nextConnection(allocator, io);
         }
 
         if (last_time) |lt| {
@@ -301,9 +301,9 @@ fn onHttpSocketTimeout(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket 
     }
     assumeState(s, true);
     if (s.isShutdown(ssl)) {
-        return s.close(allocator, ssl, 0, null);
+        return s.close(allocator, io, ssl, 0, null);
     }
-    return performRandomOperation(allocator, s);
+    return performRandomOperation(allocator, io, s);
 }
 
 pub fn main(init: std.process.Init) !void {
@@ -353,7 +353,7 @@ pub fn main(init: std.process.Init) !void {
     websocket_context.setOnEnd(ssl, &onWebSocketEnd);
     websocket_context.setOnConnectError(ssl, &onWebSocketConnectError);
 
-    listen_socket = http_context.listen(allocator, ssl, "127.0.0.1", 3000, 0, HttpSocket) catch |err| {
+    listen_socket = http_context.listen(allocator, init.io, ssl, "127.0.0.1", 3000, 0, HttpSocket) catch |err| {
         std.debug.print("Cannot listen to port 3000!\n", .{});
         return err;
     };
@@ -362,7 +362,7 @@ pub fn main(init: std.process.Init) !void {
 
     std.debug.print("Running hammer test over tcpip\n", .{});
     try state.printProgress(0);
-    _ = try nextConnection(allocator);
+    _ = try nextConnection(allocator, init.io);
     try loop.run(allocator, init.io);
 
     try state.printProgress(1);

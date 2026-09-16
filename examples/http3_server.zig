@@ -22,7 +22,7 @@ fn printCurrentHeaders() void {
     }
 }
 
-fn onStreamHeaders(_: std.mem.Allocator, s: ?*anyopaque) !void {
+fn onStreamHeaders(_: std.mem.Allocator, _: std.Io, s: ?*anyopaque) !void {
     try context.setHeader(0, ":status", "200");
     try context.sendHeaders(s, 1, true);
     const data: []const u8 = "Hello quic!";
@@ -30,23 +30,23 @@ fn onStreamHeaders(_: std.mem.Allocator, s: ?*anyopaque) !void {
     zs.quic.streamShutdown(s);
 }
 
-fn onStreamData(_: std.mem.Allocator, _: ?*anyopaque, data: []u8) !void {
+fn onStreamData(_: std.mem.Allocator, _: std.Io, _: ?*anyopaque, data: []u8) !void {
     std.debug.print("Body length is: {d}\n", .{data.len});
 }
 
-fn onStreamWritable(_: std.mem.Allocator, _: ?*anyopaque) !void {}
+fn onStreamWritable(_: std.mem.Allocator, _: std.Io, _: ?*anyopaque) !void {}
 
-fn onStreamClose(_: std.mem.Allocator, _: ?*anyopaque) !void {}
+fn onStreamClose(_: std.mem.Allocator, _: std.Io, _: ?*anyopaque) !void {}
 
-fn onOpen(_: std.mem.Allocator, _: *zs.quic.Socket, _: bool) !void {
+fn onOpen(_: std.mem.Allocator, _: std.Io, _: *zs.quic.Socket, _: bool) !void {
     std.debug.print("Connection established!\n", .{});
 }
 
-fn onStreamOpen(_: std.mem.Allocator, _: ?*anyopaque, _: bool) !void {
+fn onStreamOpen(_: std.mem.Allocator, _: std.Io, _: ?*anyopaque, _: bool) !void {
     // std.debug.print("Stream opened!\n", .{});
 }
 
-fn onClose(_: std.mem.Allocator, _: *zs.quic.Socket) !void {
+fn onClose(_: std.mem.Allocator, _: std.Io, _: *zs.quic.Socket) !void {
     std.debug.print("Disconnected!\n", .{});
 }
 

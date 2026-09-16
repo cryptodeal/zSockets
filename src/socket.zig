@@ -138,7 +138,7 @@ pub fn closeConnecting(self: *Self, _: bool) *Self {
     return self;
 }
 
-pub fn close(self: *Self, allocator: std.mem.Allocator, _: bool, code: i32, reason: ?*anyopaque) !*Self {
+pub fn close(self: *Self, allocator: std.mem.Allocator, io: std.Io, _: bool, code: i32, reason: ?*anyopaque) !*Self {
     if (!self.isClosed(false)) {
         if (self.low_priority_state == .in_queue) {
             if (self.prev) |prev| {
@@ -158,7 +158,7 @@ pub fn close(self: *Self, allocator: std.mem.Allocator, _: bool, code: i32, reas
         self.next = self.context.loop.data.closed_head;
         self.context.loop.data.closed_head = self;
         self.prev = @ptrCast(@alignCast(self.context));
-        return self.context.on_close(allocator, self, code, reason);
+        return self.context.on_close(allocator, io, self, code, reason);
     }
     return self;
 }

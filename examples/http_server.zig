@@ -17,24 +17,24 @@ fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onHttpSocketWritable(_: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onHttpSocketWritable(_: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
     const http_socket = s.getExt(HttpSocket).?;
     const http_context = s.context.getExt(HttpContext).?;
     http_socket.offset += s.write(ssl, http_context.response[http_socket.offset..], false);
     return s;
 }
 
-fn onHttpSocketClose(_: std.mem.Allocator, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
+fn onHttpSocketClose(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
     std.debug.print("Client disconnected\n", .{});
     return s;
 }
 
-fn onHttpSocketEnd(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onHttpSocketEnd(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
     s.shutdown(ssl);
-    return s.close(allocator, ssl, 0, null);
+    return s.close(allocator, io, ssl, 0, null);
 }
 
-fn onHttpSocketData(_: std.mem.Allocator, s: *zs.Socket, _: []u8) !*zs.Socket {
+fn onHttpSocketData(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: []u8) !*zs.Socket {
     const http_socket = s.getExt(HttpSocket).?;
     const http_context = s.context.getExt(HttpContext).?;
     http_socket.offset = s.write(ssl, http_context.response, false);
@@ -42,7 +42,7 @@ fn onHttpSocketData(_: std.mem.Allocator, s: *zs.Socket, _: []u8) !*zs.Socket {
     return s;
 }
 
-fn onHttpSocketOpen(_: std.mem.Allocator, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
+fn onHttpSocketOpen(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
     const http_socket = s.getExt(HttpSocket).?;
     http_socket.offset = 0;
     s.setTimeout(ssl, 30);
@@ -50,8 +50,8 @@ fn onHttpSocketOpen(_: std.mem.Allocator, s: *zs.Socket, _: bool, _: []u8) !*zs.
     return s;
 }
 
-fn onHttpSocketTimeout(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
-    return s.close(allocator, ssl, 0, null);
+fn onHttpSocketTimeout(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
+    return s.close(allocator, io, ssl, 0, null);
 }
 
 pub fn main(init: std.process.Init) !void {
@@ -90,7 +90,7 @@ pub fn main(init: std.process.Init) !void {
     http_context.setOnTimeout(false, &onHttpSocketTimeout);
     http_context.setOnEnd(false, &onHttpSocketEnd);
 
-    if (http_context.listen(allocator, false, null, 3000, 0, HttpSocket)) |_| {
+    if (http_context.listen(allocator, init.io, false, null, 3000, 0, HttpSocket)) |_| {
         std.debug.print("Listening on port 3000...\n", .{});
         try loop.run(allocator, init.io);
     } else |_| {

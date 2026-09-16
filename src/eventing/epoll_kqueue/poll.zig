@@ -16,7 +16,7 @@ state: struct {
 } = .{},
 ext: Extension = .{},
 
-pub fn create(self: *Self, allocator: std.mem.Allocator, loop: *Loop, fallthrough: bool, comptime ExtT: ?type) !void {
+pub fn create(self: *Self, allocator: std.mem.Allocator, _: std.Io, loop: *Loop, fallthrough: bool, comptime ExtT: ?type) !void {
     if (!fallthrough) loop.polls_count += 1;
     self.ext = try Extension.init(allocator, ExtT);
 }

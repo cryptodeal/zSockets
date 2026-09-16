@@ -41,7 +41,7 @@ fn printCurrentHeaders() void {
     }
 }
 
-fn onStreamHeaders(_: std.mem.Allocator, s: ?*anyopaque) !void {
+fn onStreamHeaders(_: std.mem.Allocator, _: std.Io, s: ?*anyopaque) !void {
     for (0..num_sockets) |i| {
         if (sockets[i] == zs.quic.streamSocket(s)) {
             per_socket_requests[i] += 1;
@@ -68,11 +68,11 @@ fn onStreamHeaders(_: std.mem.Allocator, s: ?*anyopaque) !void {
     zs.quic.streamSocket(s).createStream(null);
 }
 
-fn onStreamData(_: std.mem.Allocator, _: ?*anyopaque, _: []u8) !void {}
+fn onStreamData(_: std.mem.Allocator, _: std.Io, _: ?*anyopaque, _: []u8) !void {}
 
-fn onStreamWritable(_: std.mem.Allocator, _: ?*anyopaque) !void {}
+fn onStreamWritable(_: std.mem.Allocator, _: std.Io, _: ?*anyopaque) !void {}
 
-fn onStreamClose(_: std.mem.Allocator, _: ?*anyopaque) !void {}
+fn onStreamClose(_: std.mem.Allocator, _: std.Io, _: ?*anyopaque) !void {}
 
 var ignore = false;
 
@@ -94,7 +94,7 @@ fn onStart(allocator: std.mem.Allocator, io: std.Io, _: *zs.Timer) !void {
     }
 }
 
-fn onOpen(_: std.mem.Allocator, s: *zs.quic.Socket, is_client: bool) !void {
+fn onOpen(_: std.mem.Allocator, _: std.Io, s: *zs.quic.Socket, is_client: bool) !void {
     std.debug.print("New QUIC connection! Is client: {any}\n", .{is_client});
     // for now the lib creates a stream by itself here if client
     if (is_client) {
@@ -106,7 +106,7 @@ fn onOpen(_: std.mem.Allocator, s: *zs.quic.Socket, is_client: bool) !void {
     }
 }
 
-fn onStreamOpen(_: std.mem.Allocator, s: ?*anyopaque, is_client: bool) !void {
+fn onStreamOpen(_: std.mem.Allocator, _: std.Io, s: ?*anyopaque, is_client: bool) !void {
     // std.debug.print("Stream open is_client: {d}!\n", .{is_client});
     // The client begins by making a request
     if (is_client) {
@@ -118,7 +118,7 @@ fn onStreamOpen(_: std.mem.Allocator, s: ?*anyopaque, is_client: bool) !void {
     }
 }
 
-fn onClose(_: std.mem.Allocator, _: *zs.quic.Socket) !void {
+fn onClose(_: std.mem.Allocator, _: std.Io, _: *zs.quic.Socket) !void {
     std.debug.print("QUIC connection closed!\n", .{});
 }
 

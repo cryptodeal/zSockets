@@ -27,6 +27,7 @@ pub const CallbackPayload = struct {
     }
 };
 
+io: std.Io = undefined,
 uv_p: ?*libuv.uv_poll_t = null,
 fd_: std.posix.fd_t = undefined,
 poll_type: PollType = undefined,
@@ -35,7 +36,7 @@ callback_payload: *CallbackPayload = undefined,
 
 fn pollCb(p: ?*libuv.uv_poll_t, status: c_int, events_: c_int) callconv(.c) void {
     const payload: *CallbackPayload = @ptrCast(@alignCast(p.?.data));
-    loop_.internalDispatchReadyPoll(payload.allocator, payload.poll, @intCast(@intFromBool(status < 0)), @intCast(events_)) catch |err| {
+    loop_.internalDispatchReadyPoll(payload.allocator, payload.poll.io, payload.poll, @intCast(@intFromBool(status < 0)), @intCast(events_)) catch |err| {
         std.debug.print("pollCb Error: {s}\n", .{@errorName(err)});
         std.debug.dumpCurrentStackTrace(.{});
     };
@@ -49,9 +50,10 @@ fn closeCbFreePoll(h: ?*libuv.uv_handle_t) callconv(.c) void {
     }
 }
 
-pub fn create(self: *Self, allocator: std.mem.Allocator, _: *Loop, _: bool, comptime Ext: ?type) !void {
+pub fn create(self: *Self, allocator: std.mem.Allocator, io: std.Io, _: *Loop, _: bool, comptime Ext: ?type) !void {
     // TODO: set `uv_p.data` as pointer to self
     self.* = .{
+        .io = io,
         .uv_p = try allocator.create(libuv.uv_poll_t),
         .ext = try Extension.init(allocator, Ext),
         .callback_payload = try CallbackPayload.init(allocator, self),

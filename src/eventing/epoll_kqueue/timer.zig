@@ -12,7 +12,7 @@ pub fn createTimer(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallth
     const cb = try InternalCallback.init(allocator, io, loop, MaybeT);
     errdefer cb.deinit(allocator);
     if (build_opts.event_backend == .epoll) {
-        try cb.p.create(allocator, loop, fallthrough, null);
+        try cb.p.create(allocator, io, loop, fallthrough, null);
         const timer_fd = std.os.linux.timerfd_create(std.os.linux.TIMERFD_CLOCK.REALTIME, .{ .NONBLOCK = true, .CLOEXEC = true });
         cb.p.init(@intCast(timer_fd), .callback);
         return cb;

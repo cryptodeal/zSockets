@@ -24,15 +24,15 @@ head_listen_sockets: ?*ListenSocket = null,
 iterator: ?*Socket = null,
 prev: ?*Self = null,
 next: ?*Self = null,
-on_pre_open: ?*const fn (std.mem.Allocator, std.posix.socket_t, []u8) anyerror!std.posix.socket_t = null,
-on_open: *const fn (std.mem.Allocator, *Socket, bool, []u8) anyerror!*Socket = undefined,
-on_data: *const fn (std.mem.Allocator, *Socket, []u8) anyerror!*Socket = undefined,
-on_writable: *const fn (std.mem.Allocator, *Socket) anyerror!*Socket = undefined,
-on_close: *const fn (std.mem.Allocator, *Socket, i32, ?*anyopaque) anyerror!*Socket = undefined,
-on_socket_timeout: *const fn (std.mem.Allocator, *Socket) anyerror!*Socket = undefined,
-on_socket_long_timeout: ?*const fn (std.mem.Allocator, *Socket) anyerror!*Socket = null,
-on_connect_error: ?*const fn (std.mem.Allocator, *Socket, i32) anyerror!*Socket = null,
-on_end: *const fn (std.mem.Allocator, *Socket) anyerror!*Socket = undefined,
+on_pre_open: ?*const fn (std.mem.Allocator, std.Io, std.posix.socket_t, []u8) anyerror!std.posix.socket_t = null,
+on_open: *const fn (std.mem.Allocator, std.Io, *Socket, bool, []u8) anyerror!*Socket = undefined,
+on_data: *const fn (std.mem.Allocator, std.Io, *Socket, []u8) anyerror!*Socket = undefined,
+on_writable: *const fn (std.mem.Allocator, std.Io, *Socket) anyerror!*Socket = undefined,
+on_close: *const fn (std.mem.Allocator, std.Io, *Socket, i32, ?*anyopaque) anyerror!*Socket = undefined,
+on_socket_timeout: *const fn (std.mem.Allocator, std.Io, *Socket) anyerror!*Socket = undefined,
+on_socket_long_timeout: ?*const fn (std.mem.Allocator, std.Io, *Socket) anyerror!*Socket = null,
+on_connect_error: ?*const fn (std.mem.Allocator, std.Io, *Socket, i32) anyerror!*Socket = null,
+on_end: *const fn (std.mem.Allocator, std.Io, *Socket) anyerror!*Socket = undefined,
 is_low_priority: *const fn (*Socket) internal.LowPriorityQueueState = &internal.isLowPriority,
 is_ssl: bool = false,
 ext: Extension = .{},
@@ -175,16 +175,16 @@ pub fn getNativeHandle(self: *Self, ssl: bool) ?*anyopaque {
 
 const ListenError = std.mem.Allocator.Error || std.fmt.BufPrintError || error{ CreateListenSocket, GetAddrInfo };
 
-pub fn listen(self: *Self, allocator: std.mem.Allocator, ssl: bool, host: ?[:0]const u8, port: u32, options: u32, comptime MaybeT: ?type) ListenError!*ListenSocket {
+pub fn listen(self: *Self, allocator: std.mem.Allocator, io: std.Io, ssl: bool, host: ?[:0]const u8, port: u32, options: u32, comptime MaybeT: ?type) ListenError!*ListenSocket {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
-            return @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).listen(allocator, host, port, options, MaybeT);
+            return @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).listen(allocator, io, host, port, options, MaybeT);
         }
     }
     const listen_socket_fd = try bsd.createListenSocket(host, port, options);
     // TODO: probably need `errdefer` handling here
     const ls = try ListenSocket.init(allocator, self, MaybeT);
-    try ls.s.p.create(allocator, self.loop, false, null);
+    try ls.s.p.create(allocator, io, self.loop, false, null);
     // std.debug.print("Created listen socket; socket field ptr: {d}\n", .{@intFromPtr(&ls.s)});
     ls.s.p.init(listen_socket_fd, .semi_socket);
     ls.s.p.start(self.loop, socket_readable);
@@ -193,15 +193,15 @@ pub fn listen(self: *Self, allocator: std.mem.Allocator, ssl: bool, host: ?[:0]c
 }
 
 const ListenUnixError = std.mem.Allocator.Error || bsd.SocketError || error{CreateListenSocketUnix};
-pub fn listenUnix(self: *Self, allocator: std.mem.Allocator, ssl: bool, path: [:0]const u8, options: u32, comptime MaybeT: ?type) ListenUnixError!*ListenSocket {
+pub fn listenUnix(self: *Self, allocator: std.mem.Allocator, io: std.Io, ssl: bool, path: [:0]const u8, options: u32, comptime MaybeT: ?type) ListenUnixError!*ListenSocket {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
-            return @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).listenUnix(allocator, path, options, MaybeT);
+            return @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).listenUnix(allocator, io, path, options, MaybeT);
         }
     }
     const listen_socket_fd = try bsd.createListenSocketUnix(path, options);
     const ls = try ListenSocket.init(allocator, self, MaybeT);
-    try ls.s.p.create(allocator, self.loop, false, null);
+    try ls.s.p.create(allocator, io, self.loop, false, null);
     // std.debug.print("Created listen socket unix; socket field ptr: {d}\n", .{@intFromPtr(&ls.s)});
     ls.s.p.init(listen_socket_fd, .semi_socket);
     ls.s.p.start(self.loop, socket_readable);
@@ -209,25 +209,25 @@ pub fn listenUnix(self: *Self, allocator: std.mem.Allocator, ssl: bool, path: [:
     return ls;
 }
 
-pub fn connect(self: *Self, allocator: std.mem.Allocator, ssl: bool, host: [:0]const u8, port: u32, source_host: ?[:0]const u8, options: u32, comptime MaybeT: ?type) !*Socket {
+pub fn connect(self: *Self, allocator: std.mem.Allocator, io: std.Io, ssl: bool, host: [:0]const u8, port: u32, source_host: ?[:0]const u8, options: u32, comptime MaybeT: ?type) !*Socket {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
-            return &(try @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).connect(allocator, host, port, source_host, options, MaybeT)).s;
+            return &(try @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).connect(allocator, io, host, port, source_host, options, MaybeT)).s;
         }
     }
     const connect_socket = try allocator.create(Socket);
-    try internal.connect(allocator, self, connect_socket, host, port, source_host, options, MaybeT);
+    try internal.connect(allocator, io, self, connect_socket, host, port, source_host, options, MaybeT);
     return connect_socket;
 }
 
-pub fn connectUnix(self: *Self, allocator: std.mem.Allocator, ssl: bool, server_path: [:0]const u8, options: u32, comptime MaybeT: ?type) !*Socket {
+pub fn connectUnix(self: *Self, allocator: std.mem.Allocator, io: std.Io, ssl: bool, server_path: [:0]const u8, options: u32, comptime MaybeT: ?type) !*Socket {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
-            return &(try @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).connectUnix(allocator, server_path, options, MaybeT)).s;
+            return &(try @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).connectUnix(allocator, io, server_path, options, MaybeT)).s;
         }
     }
     const connect_socket = try allocator.create(Socket);
-    try internal.connectUnix(allocator, self, connect_socket, server_path, options, MaybeT);
+    try internal.connectUnix(allocator, io, self, connect_socket, server_path, options, MaybeT);
     return connect_socket;
 }
 
@@ -268,11 +268,11 @@ pub fn adoptSocket(self: *Self, allocator: std.mem.Allocator, ssl: bool, s: *Soc
     return s;
 }
 
-pub fn setOnPreOpen(self: *Self, _: bool, func: *const fn (std.mem.Allocator, std.posix.fd_t, []u8) anyerror!std.posix.fd_t) void {
+pub fn setOnPreOpen(self: *Self, _: bool, func: *const fn (std.mem.Allocator, std.Io, std.posix.fd_t, []u8) anyerror!std.posix.fd_t) void {
     self.on_pre_open = func;
 }
 
-pub fn setOnOpen(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, *Socket, bool, []u8) anyerror!*Socket) void {
+pub fn setOnOpen(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, std.Io, *Socket, bool, []u8) anyerror!*Socket) void {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).setOnOpen(@ptrCast(@alignCast(func)));
@@ -282,7 +282,7 @@ pub fn setOnOpen(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, *So
     self.on_open = func;
 }
 
-pub fn setOnClose(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, *Socket, i32, ?*anyopaque) anyerror!*Socket) void {
+pub fn setOnClose(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, std.Io, *Socket, i32, ?*anyopaque) anyerror!*Socket) void {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).setOnClose(@ptrCast(@alignCast(func)));
@@ -292,7 +292,7 @@ pub fn setOnClose(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, *S
     self.on_close = func;
 }
 
-pub fn setOnData(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, *Socket, []u8) anyerror!*Socket) void {
+pub fn setOnData(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, std.Io, *Socket, []u8) anyerror!*Socket) void {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).setOnData(@ptrCast(@alignCast(func)));
@@ -302,7 +302,7 @@ pub fn setOnData(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, *So
     self.on_data = func;
 }
 
-pub fn setOnWritable(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, *Socket) anyerror!*Socket) void {
+pub fn setOnWritable(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, std.Io, *Socket) anyerror!*Socket) void {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).setOnWritable(@ptrCast(@alignCast(func)));
@@ -312,7 +312,7 @@ pub fn setOnWritable(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator,
     self.on_writable = func;
 }
 
-pub fn setOnLongTimeout(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, *Socket) anyerror!*Socket) void {
+pub fn setOnLongTimeout(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, std.Io, *Socket) anyerror!*Socket) void {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).setOnLongTimeout(@ptrCast(@alignCast(func)));
@@ -322,7 +322,7 @@ pub fn setOnLongTimeout(self: *Self, ssl: bool, func: *const fn (std.mem.Allocat
     self.on_socket_long_timeout = func;
 }
 
-pub fn setOnTimeout(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, *Socket) anyerror!*Socket) void {
+pub fn setOnTimeout(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, std.Io, *Socket) anyerror!*Socket) void {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).setOnTimeout(@ptrCast(@alignCast(func)));
@@ -332,7 +332,7 @@ pub fn setOnTimeout(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, 
     self.on_socket_timeout = func;
 }
 
-pub fn setOnEnd(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, *Socket) anyerror!*Socket) void {
+pub fn setOnEnd(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, std.Io, *Socket) anyerror!*Socket) void {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).setOnEnd(@ptrCast(@alignCast(func)));
@@ -342,7 +342,7 @@ pub fn setOnEnd(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, *Soc
     self.on_end = func;
 }
 
-pub fn setOnConnectError(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, *Socket, i32) anyerror!*Socket) void {
+pub fn setOnConnectError(self: *Self, ssl: bool, func: *const fn (std.mem.Allocator, std.Io, *Socket, i32) anyerror!*Socket) void {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             @as(*openssl.SslSocketContext, @fieldParentPtr("sc", self)).setOnConnectError(@ptrCast(@alignCast(func)));

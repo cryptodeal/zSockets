@@ -10,6 +10,7 @@ const Self = @This();
 // TODO: remove this; currently used for stashing user provided
 // allocator in callbacks
 allocator: std.mem.Allocator = undefined,
+io: std.Io = undefined,
 events_: u32 = 0,
 gcd_read: std.c.dispatch.source_t = undefined,
 gcd_write: std.c.dispatch.source_t = undefined,
@@ -19,7 +20,7 @@ ext: Extension = .{},
 
 fn gcdReadHandler(p: ?*anyopaque) callconv(.c) void {
     const poll: *Self = @ptrCast(@alignCast(p));
-    loop_.internalDispatchReadyPoll(poll.allocator, poll, 0, constants.socket_readable) catch |err| {
+    loop_.internalDispatchReadyPoll(poll.allocator, poll.io, poll, 0, constants.socket_readable) catch |err| {
         std.debug.print("gcdReadHandler Error: {s}\n", .{@errorName(err)});
         std.debug.dumpCurrentStackTrace(.{});
     };
@@ -27,15 +28,16 @@ fn gcdReadHandler(p: ?*anyopaque) callconv(.c) void {
 
 fn gcdWriteHandler(p: ?*anyopaque) callconv(.c) void {
     const poll: *Self = @ptrCast(@alignCast(p));
-    loop_.internalDispatchReadyPoll(poll.allocator, poll, 0, constants.socket_writable) catch |err| {
+    loop_.internalDispatchReadyPoll(poll.allocator, poll.io, poll, 0, constants.socket_writable) catch |err| {
         std.debug.print("gcdWriteHandler Error: {s}\n", .{@errorName(err)});
         std.debug.dumpCurrentStackTrace(.{});
     };
 }
 
-pub fn create(self: *Self, allocator: std.mem.Allocator, _: *Loop, _: bool, comptime Ext: ?type) !void {
+pub fn create(self: *Self, allocator: std.mem.Allocator, io: std.Io, _: *Loop, _: bool, comptime Ext: ?type) !void {
     self.* = .{
         .allocator = allocator,
+        .io = io,
         .ext = try Extension.init(allocator, Ext),
     };
 }

@@ -62,10 +62,10 @@ pub const SslSocketContext = struct {
     sc: SocketContext = undefined,
     ssl_context: ?*ssl.SSL_CTX = null,
     is_parent: bool = false,
-    on_open: *const fn (std.mem.Allocator, *SslSocket, bool, []u8) anyerror!*SslSocket = undefined,
-    on_data: *const fn (std.mem.Allocator, *SslSocket, []u8) anyerror!*SslSocket = undefined,
-    on_writable: *const fn (std.mem.Allocator, *SslSocket) anyerror!*SslSocket = undefined,
-    on_close: *const fn (std.mem.Allocator, *SslSocket, i32, ?*anyopaque) anyerror!*SslSocket = undefined,
+    on_open: *const fn (std.mem.Allocator, std.Io, *SslSocket, bool, []u8) anyerror!*SslSocket = undefined,
+    on_data: *const fn (std.mem.Allocator, std.Io, *SslSocket, []u8) anyerror!*SslSocket = undefined,
+    on_writable: *const fn (std.mem.Allocator, std.Io, *SslSocket) anyerror!*SslSocket = undefined,
+    on_close: *const fn (std.mem.Allocator, std.Io, *SslSocket, i32, ?*anyopaque) anyerror!*SslSocket = undefined,
     // TODO: might need allocator/error
     on_server_name: ?*const fn (*SslSocketContext, []const u8) void = null,
     // TODO: might be able to type this more accurately
@@ -164,61 +164,61 @@ pub const SslSocketContext = struct {
         return @ptrCast(@alignCast(user));
     }
 
-    pub fn listen(self: *SslSocketContext, allocator: std.mem.Allocator, host: ?[:0]const u8, port: u32, options: u32, comptime MaybeT: ?type) !*ListenSocket {
-        return self.sc.listen(allocator, false, host, port, options, MaybeT);
+    pub fn listen(self: *SslSocketContext, allocator: std.mem.Allocator, io: std.Io, host: ?[:0]const u8, port: u32, options: u32, comptime MaybeT: ?type) !*ListenSocket {
+        return self.sc.listen(allocator, io, false, host, port, options, MaybeT);
     }
 
-    pub fn listenUnix(self: *SslSocketContext, allocator: std.mem.Allocator, path: [:0]const u8, options: u32, comptime MaybeT: ?type) !*ListenSocket {
-        return self.sc.listenUnix(allocator, false, path, options, MaybeT);
+    pub fn listenUnix(self: *SslSocketContext, allocator: std.mem.Allocator, io: std.Io, path: [:0]const u8, options: u32, comptime MaybeT: ?type) !*ListenSocket {
+        return self.sc.listenUnix(allocator, io, false, path, options, MaybeT);
     }
 
-    pub fn connect(self: *SslSocketContext, allocator: std.mem.Allocator, host: [:0]const u8, port: u32, source_host: ?[:0]const u8, options: u32, comptime MaybeT: ?type) !*SslSocket {
+    pub fn connect(self: *SslSocketContext, allocator: std.mem.Allocator, io: std.Io, host: [:0]const u8, port: u32, source_host: ?[:0]const u8, options: u32, comptime MaybeT: ?type) !*SslSocket {
         const res = try allocator.create(SslSocket);
-        try internal.connect(allocator, &self.sc, &res.s, host, port, source_host, options, MaybeT);
+        try internal.connect(allocator, io, &self.sc, &res.s, host, port, source_host, options, MaybeT);
         res.s.is_ssl = true;
         return res;
     }
 
-    pub fn connectUnix(self: *SslSocketContext, allocator: std.mem.Allocator, server_path: [:0]const u8, options: u32, comptime MaybeT: ?type) !*SslSocket {
+    pub fn connectUnix(self: *SslSocketContext, allocator: std.mem.Allocator, io: std.Io, server_path: [:0]const u8, options: u32, comptime MaybeT: ?type) !*SslSocket {
         const res = try allocator.create(SslSocket);
-        try internal.connectUnix(allocator, &self.sc, &res.s, server_path, options, MaybeT);
+        try internal.connectUnix(allocator, io, &self.sc, &res.s, server_path, options, MaybeT);
         res.s.is_ssl = true;
         return res;
     }
 
-    pub fn setOnOpen(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, *SslSocket, bool, []u8) anyerror!*SslSocket) void {
+    pub fn setOnOpen(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, std.Io, *SslSocket, bool, []u8) anyerror!*SslSocket) void {
         self.sc.setOnOpen(false, @ptrCast(@alignCast(&sslOnOpen)));
         self.on_open = cb;
     }
 
-    pub fn setOnClose(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, *SslSocket, i32, ?*anyopaque) anyerror!*SslSocket) void {
+    pub fn setOnClose(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, std.Io, *SslSocket, i32, ?*anyopaque) anyerror!*SslSocket) void {
         self.sc.setOnClose(false, @ptrCast(@alignCast(&sslOnClose)));
         self.on_close = cb;
     }
 
-    pub fn setOnData(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, *SslSocket, []u8) anyerror!*SslSocket) void {
+    pub fn setOnData(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, std.Io, *SslSocket, []u8) anyerror!*SslSocket) void {
         self.sc.setOnData(false, @ptrCast(@alignCast(&sslOnData)));
         self.on_data = cb;
     }
 
-    pub fn setOnWritable(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, *SslSocket) anyerror!*SslSocket) void {
+    pub fn setOnWritable(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, std.Io, *SslSocket) anyerror!*SslSocket) void {
         self.sc.setOnWritable(false, @ptrCast(@alignCast(&sslOnWritable)));
         self.on_writable = cb;
     }
 
-    pub fn setOnTimeout(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, *SslSocket) anyerror!*SslSocket) void {
+    pub fn setOnTimeout(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, std.Io, *SslSocket) anyerror!*SslSocket) void {
         self.sc.setOnTimeout(false, @ptrCast(@alignCast(cb)));
     }
 
-    pub fn setOnLongTimeout(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, *SslSocket) anyerror!*SslSocket) void {
+    pub fn setOnLongTimeout(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, std.Io, *SslSocket) anyerror!*SslSocket) void {
         self.sc.setOnLongTimeout(false, @ptrCast(@alignCast(cb)));
     }
 
-    pub fn setOnEnd(self: *SslSocketContext, _: *const fn (std.mem.Allocator, *SslSocket) anyerror!*SslSocket) void {
+    pub fn setOnEnd(self: *SslSocketContext, _: *const fn (std.mem.Allocator, std.Io, *SslSocket) anyerror!*SslSocket) void {
         self.sc.setOnEnd(false, @ptrCast(@alignCast(&sslOnEnd)));
     }
 
-    pub fn setOnConnectError(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, *SslSocket, i32) anyerror!*SslSocket) void {
+    pub fn setOnConnectError(self: *SslSocketContext, cb: *const fn (std.mem.Allocator, std.Io, *SslSocket, i32) anyerror!*SslSocket) void {
         self.sc.setOnConnectError(false, @ptrCast(@alignCast(cb)));
     }
 
@@ -234,8 +234,8 @@ pub const SslSocket = struct {
     ssl_write_wants_read: bool,
     ssl_read_wants_write: bool,
 
-    pub fn close(self: *SslSocket, allocator: std.mem.Allocator, code: i32, reason: ?*anyopaque) !*SslSocket {
-        return @fieldParentPtr("s", try self.s.close(allocator, false, code, reason));
+    pub fn close(self: *SslSocket, allocator: std.mem.Allocator, io: std.Io, code: i32, reason: ?*anyopaque) !*SslSocket {
+        return @fieldParentPtr("s", try self.s.close(allocator, io, false, code, reason));
     }
 
     pub fn isLowPriority(self: *SslSocket) bool {
@@ -354,7 +354,7 @@ const BioS = struct {
     }
 };
 
-pub fn sslOnOpen(allocator: std.mem.Allocator, s: *SslSocket, is_client: bool, ip: []u8) !*SslSocket {
+pub fn sslOnOpen(allocator: std.mem.Allocator, io: std.Io, s: *SslSocket, is_client: bool, ip: []u8) !*SslSocket {
     const context: *SslSocketContext = @fieldParentPtr("sc", s.s.context);
     const loop = context.sc.loop;
     const loop_ssl_data: *LoopSslData = @ptrCast(@alignCast(loop.data.ssl_data));
@@ -369,16 +369,16 @@ pub fn sslOnOpen(allocator: std.mem.Allocator, s: *SslSocket, is_client: bool, i
     } else {
         ssl.SSL_set_accept_state(s.ssl);
     }
-    return context.on_open(allocator, s, is_client, ip);
+    return context.on_open(allocator, io, s, is_client, ip);
 }
 
-pub fn sslOnClose(allocator: std.mem.Allocator, s: *SslSocket, code: i32, reason: ?*anyopaque) !*SslSocket {
+pub fn sslOnClose(allocator: std.mem.Allocator, io: std.Io, s: *SslSocket, code: i32, reason: ?*anyopaque) !*SslSocket {
     const context: *SslSocketContext = @fieldParentPtr("sc", s.s.context);
     ssl.SSL_free(s.ssl);
-    return context.on_close(allocator, s, code, reason);
+    return context.on_close(allocator, io, s, code, reason);
 }
 
-pub fn sslOnData(allocator: std.mem.Allocator, self: *SslSocket, data: []u8) !*SslSocket {
+pub fn sslOnData(allocator: std.mem.Allocator, io: std.Io, self: *SslSocket, data: []u8) !*SslSocket {
     var self_ = self;
     var context: *SslSocketContext = @fieldParentPtr("sc", self_.s.context);
     const loop = context.sc.loop;
@@ -391,7 +391,7 @@ pub fn sslOnData(allocator: std.mem.Allocator, self: *SslSocket, data: []u8) !*S
     if (self_.isShutdown()) {
         const ret = ssl.SSL_shutdown(self_.ssl);
         if (ret == 1) {
-            return self_.close(allocator, 0, null);
+            return self_.close(allocator, io, 0, null);
         } else if (ret < 0) {
             const err = ssl.SSL_get_error(self_.ssl, ret);
             if (err == ssl.SSL_ERROR_SSL or err == ssl.SSL_ERROR_SYSCALL) {
@@ -410,19 +410,19 @@ pub fn sslOnData(allocator: std.mem.Allocator, self: *SslSocket, data: []u8) !*S
                 if (err == ssl.SSL_ERROR_SSL or err == ssl.SSL_ERROR_SYSCALL) {
                     ssl.ERR_clear_error();
                 }
-                return self_.close(allocator, 0, null);
+                return self_.close(allocator, io, 0, null);
             } else {
                 if (err == ssl.SSL_ERROR_WANT_WRITE) {
                     self_.ssl_read_wants_write = true;
                 }
                 if (loop_ssl_data.ssl_read_input_length != 0) {
-                    return self_.close(allocator, 0, null);
+                    return self_.close(allocator, io, 0, null);
                 }
                 if (read == 0) {
                     break;
                 }
                 context = @fieldParentPtr("sc", self_.s.context);
-                self_ = try context.on_data(allocator, self_, loop_ssl_data.ssl_read_output[constants.recv_buffer_padding..@intCast(constants.recv_buffer_padding + read)]);
+                self_ = try context.on_data(allocator, io, self_, loop_ssl_data.ssl_read_output[constants.recv_buffer_padding..@intCast(constants.recv_buffer_padding + read)]);
                 if (self_.s.isClosed(false)) {
                     return self_;
                 }
@@ -432,7 +432,7 @@ pub fn sslOnData(allocator: std.mem.Allocator, self: *SslSocket, data: []u8) !*S
         read += just_read;
         if (read == constants.recv_buffer_length) {
             context = @fieldParentPtr("sc", self_.s.context);
-            self_ = try context.on_data(allocator, self_, loop_ssl_data.ssl_read_output[constants.recv_buffer_padding..@intCast(constants.recv_buffer_padding + read)]);
+            self_ = try context.on_data(allocator, io, self_, loop_ssl_data.ssl_read_output[constants.recv_buffer_padding..@intCast(constants.recv_buffer_padding + read)]);
             if (self_.s.isClosed(false)) {
                 return self_;
             }
@@ -444,32 +444,32 @@ pub fn sslOnData(allocator: std.mem.Allocator, self: *SslSocket, data: []u8) !*S
     if (self_.ssl_write_wants_read) {
         self_.ssl_write_wants_read = false;
         context = @fieldParentPtr("sc", self_.s.context);
-        self_ = @fieldParentPtr("s", try context.sc.on_writable(allocator, &self_.s));
+        self_ = @fieldParentPtr("s", try context.sc.on_writable(allocator, io, &self_.s));
         if (self_.s.isClosed(false)) {
             return self_;
         }
     }
 
     if (ssl.SSL_get_shutdown(self_.ssl) & ssl.SSL_RECEIVED_SHUTDOWN != 0) {
-        self_ = try self_.close(allocator, 0, null);
+        self_ = try self_.close(allocator, io, 0, null);
     }
     return self_;
 }
 
-pub fn sslOnWritable(allocator: std.mem.Allocator, self: *SslSocket) !*SslSocket {
+pub fn sslOnWritable(allocator: std.mem.Allocator, io: std.Io, self: *SslSocket) !*SslSocket {
     var self_ = self;
     var context: *SslSocketContext = @fieldParentPtr("sc", self_.s.context);
     if (self_.ssl_read_wants_write) {
         self_.ssl_read_wants_write = false;
         context = @fieldParentPtr("sc", self_.s.context);
-        self_ = @fieldParentPtr("s", try context.sc.on_data(allocator, &self.s, &.{}));
+        self_ = @fieldParentPtr("s", try context.sc.on_data(allocator, io, &self.s, &.{}));
     }
-    self_ = try context.on_writable(allocator, self_);
+    self_ = try context.on_writable(allocator, io, self_);
     return self_;
 }
 
-pub fn sslOnEnd(allocator: std.mem.Allocator, self: *SslSocket) !*SslSocket {
-    return self.close(allocator, 0, null);
+pub fn sslOnEnd(allocator: std.mem.Allocator, io: std.Io, self: *SslSocket) !*SslSocket {
+    return self.close(allocator, io, 0, null);
 }
 
 pub fn initLoopSslData(allocator: std.mem.Allocator, loop: *Loop) !void {
@@ -601,9 +601,9 @@ fn sniHostnameDestructor(allocator: std.mem.Allocator, user: ?*anyopaque) void {
     freeSslCtx(allocator, @as(?*ssl.SSL_CTX, @ptrCast(@alignCast(user))));
 }
 
-pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, context: *SslSocketContext, accepted_fd: std.posix.fd_t, addr_ip: []u8, extension: Extension) !*SslSocket {
+pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, io: std.Io, context: *SslSocketContext, accepted_fd: std.posix.fd_t, addr_ip: []u8, extension: Extension) !*SslSocket {
     const socket = try allocator.create(SslSocket);
-    try internal.adoptAcceptedSocket(allocator, &socket.s, &context.sc, accepted_fd, addr_ip, extension);
+    try internal.adoptAcceptedSocket(allocator, io, &socket.s, &context.sc, accepted_fd, addr_ip, extension);
     socket.s.is_ssl = true;
     return socket;
 }

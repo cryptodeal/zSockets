@@ -38,7 +38,7 @@ pub fn loopUnlink(loop: *Loop, context: *SocketContext) void {
     }
 }
 
-pub fn internalTimerSweep(allocator: std.mem.Allocator, loop: *Loop) !void {
+pub fn internalTimerSweep(allocator: std.mem.Allocator, io: std.Io, loop: *Loop) !void {
     const loop_data = &loop.data;
     loop_data.iterator = loop_data.head;
     while (loop_data.iterator) |context| : (loop_data.iterator = context.next) {
@@ -62,11 +62,11 @@ pub fn internalTimerSweep(allocator: std.mem.Allocator, loop: *Loop) !void {
             context.iterator = s;
             if (@as(u8, @intCast(short_ticks)) == s.?.timeout) {
                 s.?.timeout = 255;
-                _ = try context.on_socket_timeout(allocator, s.?);
+                _ = try context.on_socket_timeout(allocator, io, s.?);
             }
             if (context.iterator == s and @as(u8, @intCast(long_ticks)) == s.?.long_timeout) {
                 s.?.long_timeout = 255;
-                _ = try context.on_socket_long_timeout.?(allocator, s.?);
+                _ = try context.on_socket_long_timeout.?(allocator, io, s.?);
             }
             if (s == context.iterator) {
                 s = s.?.next;
@@ -114,8 +114,8 @@ fn freeClosedSockets(allocator: std.mem.Allocator, loop: *Loop) void {
     }
 }
 
-fn sweepTimerCb(allocator: std.mem.Allocator, _: std.Io, cb: *InternalCallback) !void {
-    try internalTimerSweep(allocator, cb.loop);
+fn sweepTimerCb(allocator: std.mem.Allocator, io: std.Io, cb: *InternalCallback) !void {
+    try internalTimerSweep(allocator, io, cb.loop);
 }
 
 fn loopIterationNumber(loop: *const Loop) i64 {
@@ -134,14 +134,14 @@ pub fn post(allocator: std.mem.Allocator, io: std.Io, loop: *Loop) !void {
 }
 
 // TODO: unused parameter is `ssl: bool` for future SSL support
-pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, ssl: bool, context: *SocketContext, accepted_fd: std.posix.socket_t, addr_ip: []u8, extension: Extension) !*Socket {
+pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, io: std.Io, ssl: bool, context: *SocketContext, accepted_fd: std.posix.socket_t, addr_ip: []u8, extension: Extension) !*Socket {
     if (build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
-            return &(try openssl.adoptAcceptedSocket(allocator, @fieldParentPtr("sc", context), accepted_fd, addr_ip, extension)).s;
+            return &(try openssl.adoptAcceptedSocket(allocator, io, @fieldParentPtr("sc", context), accepted_fd, addr_ip, extension)).s;
         }
     }
     const res = try allocator.create(Socket);
-    try internal.adoptAcceptedSocket(allocator, res, context, accepted_fd, addr_ip, extension);
+    try internal.adoptAcceptedSocket(allocator, io, res, context, accepted_fd, addr_ip, extension);
     return res;
 }
 
@@ -160,14 +160,14 @@ pub fn internalDispatchReadyPoll(allocator: std.mem.Allocator, io: std.Io, p: *P
             if (p.events() == socket_writable) {
                 const s: *Socket = @fieldParentPtr("p", p);
                 if (err != 0) {
-                    _ = try s.context.on_connect_error.?(allocator, s, 0);
+                    _ = try s.context.on_connect_error.?(allocator, io, s, 0);
                     _ = s.closeConnecting(false);
                 } else {
                     p.change(s.context.loop, socket_readable);
                     bsd.socketNoDelay(p.fd(), true);
                     p.setType(.socket);
                     s.setTimeout(false, 0);
-                    _ = try s.context.on_open(allocator, s, true, &.{});
+                    _ = try s.context.on_open(allocator, io, s, true, &.{});
                 }
             } else {
                 const listen_socket: *ListenSocket = @fieldParentPtr("s", @as(*Socket, @fieldParentPtr("p", p)));
@@ -176,9 +176,9 @@ pub fn internalDispatchReadyPoll(allocator: std.mem.Allocator, io: std.Io, p: *P
                 inner: while (bsd.acceptSocket(p.fd(), &addr)) |fd| {
                     client_fd = fd;
                     const context = listen_socket.s.context;
-                    if (context.on_pre_open == null or (try context.on_pre_open.?(allocator, client_fd, @as([*]u8, @ptrCast(@alignCast(addr.ip)))[0..@as(usize, @intCast(addr.ip_length))])) == client_fd) {
+                    if (context.on_pre_open == null or (try context.on_pre_open.?(allocator, io, client_fd, @as([*]u8, @ptrCast(@alignCast(addr.ip)))[0..@as(usize, @intCast(addr.ip_length))])) == client_fd) {
                         // TODO: update lamda `ext` creation/deletion across varying types to conform to this pattern (when needed)
-                        _ = try adoptAcceptedSocket(allocator, false, context, client_fd, @as([*]u8, @ptrCast(@alignCast(addr.ip)))[0..@as(usize, @intCast(addr.ip_length))], listen_socket.s.ext);
+                        _ = try adoptAcceptedSocket(allocator, io, false, context, client_fd, @as([*]u8, @ptrCast(@alignCast(addr.ip)))[0..@as(usize, @intCast(addr.ip_length))], listen_socket.s.ext);
                         if (listen_socket.s.isClosed(false)) {
                             break :inner;
                         }
@@ -189,12 +189,12 @@ pub fn internalDispatchReadyPoll(allocator: std.mem.Allocator, io: std.Io, p: *P
         .socket_shutdown, .socket => {
             var s: *Socket = @fieldParentPtr("p", p);
             if (err != 0) {
-                s = try s.close(allocator, false, 0, null);
+                s = try s.close(allocator, io, false, 0, null);
                 return;
             }
             if (events & socket_writable != 0) {
                 s.context.loop.data.last_write_failed = false;
-                s = try s.context.on_writable(allocator, s);
+                s = try s.context.on_writable(allocator, io, s);
                 if (s.isClosed(false)) {
                     return;
                 }
@@ -223,17 +223,17 @@ pub fn internalDispatchReadyPoll(allocator: std.mem.Allocator, io: std.Io, p: *P
                 var length: isize = bsd.recv(s.p.fd(), s.context.loop.data.recv_buf[constants.recv_buffer_padding .. constants.recv_buffer_padding + constants.recv_buffer_length], 0);
                 while (true) : (length = bsd.recv(s.p.fd(), s.context.loop.data.recv_buf[constants.recv_buffer_padding .. constants.recv_buffer_padding + constants.recv_buffer_length], 0)) {
                     if (length > 0) {
-                        s = try s.context.on_data(allocator, s, s.context.loop.data.recv_buf[constants.recv_buffer_padding .. constants.recv_buffer_padding + @as(usize, @intCast(length))]);
+                        s = try s.context.on_data(allocator, io, s, s.context.loop.data.recv_buf[constants.recv_buffer_padding .. constants.recv_buffer_padding + @as(usize, @intCast(length))]);
                         if (length == constants.recv_buffer_length and !s.isClosed(false)) continue;
                     } else if (length == 0) {
                         if (s.isShutdown(false)) {
-                            s = try s.close(allocator, false, 0, null);
+                            s = try s.close(allocator, io, false, 0, null);
                         } else {
                             s.p.change(s.context.loop, s.p.events() & socket_writable);
-                            s = try s.context.on_end(allocator, s);
+                            s = try s.context.on_end(allocator, io, s);
                         }
                     } else if (length == -1 and !bsd.wouldBlock()) {
-                        s = try s.close(allocator, false, 0, null);
+                        s = try s.close(allocator, io, false, 0, null);
                     }
                     break;
                 }

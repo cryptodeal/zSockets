@@ -7,31 +7,31 @@ fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
-fn onHttpSocketWritable(_: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onHttpSocketWritable(_: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
     return s;
 }
 
-fn onHttpSocketClose(_: std.mem.Allocator, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
+fn onHttpSocketClose(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
     std.debug.print("Client disconnected\n", .{});
     return s;
 }
 
-fn onHttpSocketEnd(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onHttpSocketEnd(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
     s.shutdown(false);
-    return s.close(allocator, false, 0, null);
+    return s.close(allocator, io, false, 0, null);
 }
 
-fn onHttpSocketData(_: std.mem.Allocator, s: *zs.Socket, _: []u8) !*zs.Socket {
+fn onHttpSocketData(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: []u8) !*zs.Socket {
     _ = s.write(false, "Hello short message!", false);
     return s;
 }
 
-fn onHttpSocketOpen(_: std.mem.Allocator, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
+fn onHttpSocketOpen(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
     std.debug.print("Client connected\n", .{});
     return s;
 }
 
-fn onHttpSocketTimeout(_: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onHttpSocketTimeout(_: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
     return s;
 }
 
@@ -58,7 +58,7 @@ pub fn main(init: std.process.Init) !void {
     http_context.setOnTimeout(false, &onHttpSocketTimeout);
     http_context.setOnEnd(false, &onHttpSocketEnd);
 
-    if (http_context.listen(allocator, false, null, 3000, 0, null)) |_| {
+    if (http_context.listen(allocator, init.io, false, null, 3000, 0, null)) |_| {
         std.debug.print("Listening on port 3000...\n", .{});
         try loop.run(allocator, init.io);
     } else |_| {

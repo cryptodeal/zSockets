@@ -23,8 +23,8 @@ const SocketCtx = struct {
     backpressure: []u8,
 };
 
-fn onWakeup(allocator: std.mem.Allocator, _: std.Io, loop: *zs.Loop) !void {
-    try zs.loop.internalTimerSweep(allocator, loop);
+fn onWakeup(allocator: std.mem.Allocator, io: std.Io, loop: *zs.Loop) !void {
+    try zs.loop.internalTimerSweep(allocator, io, loop);
 }
 
 fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
@@ -58,7 +58,7 @@ fn writeBackpressure(allocator: std.mem.Allocator, ssl_: bool, s: *zs.Socket) !v
     }
 }
 
-fn onServerSocketWritable(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onServerSocketWritable(allocator: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
     std.debug.print("onServerSocketWritable\n", .{});
     try writeBackpressure(allocator, ssl, s);
     // Peer is not boring
@@ -66,7 +66,7 @@ fn onServerSocketWritable(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Sock
     return s;
 }
 
-fn onClientSocketWritable(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onClientSocketWritable(allocator: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
     std.debug.print("onClientSocketWritable\n", .{});
     try writeBackpressure(allocator, ssl, s);
     // Peer is not boring
@@ -74,26 +74,26 @@ fn onClientSocketWritable(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Sock
     return s;
 }
 
-fn onServerSocketClose(_: std.mem.Allocator, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
+fn onServerSocketClose(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
     std.debug.print("onServerSocketClose\n", .{});
     listen_socket.?.close(ssl);
     return s;
 }
 
-fn onClientSocketClose(_: std.mem.Allocator, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
+fn onClientSocketClose(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
     std.debug.print("onClientSocketClose\n", .{});
     return s;
 }
 
-fn onServerSocketEnd(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
-    return s.close(allocator, ssl, 0, null);
+fn onServerSocketEnd(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
+    return s.close(allocator, io, ssl, 0, null);
 }
 
-fn onClientSocketEnd(allocator: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
-    return s.close(allocator, ssl, 0, null);
+fn onClientSocketEnd(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs.Socket {
+    return s.close(allocator, io, ssl, 0, null);
 }
 
-fn onServerSocketData(allocator: std.mem.Allocator, s: *zs.Socket, data: []u8) !*zs.Socket {
+fn onServerSocketData(allocator: std.mem.Allocator, _: std.Io, s: *zs.Socket, data: []u8) !*zs.Socket {
     if (data.len == 0) {
         std.debug.print("ERROR: Got data event with no data\n", .{});
         std.process.exit(1);
@@ -104,17 +104,17 @@ fn onServerSocketData(allocator: std.mem.Allocator, s: *zs.Socket, data: []u8) !
     return s;
 }
 
-fn onClientSocketData(allocator: std.mem.Allocator, s: *zs.Socket, data: []u8) !*zs.Socket {
+fn onClientSocketData(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, data: []u8) !*zs.Socket {
     if (data.len == 0) {
         std.debug.print("ERROR: Got data event with no data\n", .{});
         std.process.exit(1);
     }
     std.debug.print("onClientSocketData: received '{s}'\n", .{data});
     client_received_data = true;
-    return s.close(allocator, ssl, 0, null);
+    return s.close(allocator, io, ssl, 0, null);
 }
 
-fn onServerSocketOpen(_: std.mem.Allocator, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
+fn onServerSocketOpen(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
     std.debug.print("onServerSocketOpen\n", .{});
     const ctx = s.getExt(SocketCtx).?;
     ctx.backpressure = &.{};
@@ -123,7 +123,7 @@ fn onServerSocketOpen(_: std.mem.Allocator, s: *zs.Socket, _: bool, _: []u8) !*z
     return s;
 }
 
-fn onClientSocketOpen(allocator: std.mem.Allocator, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
+fn onClientSocketOpen(allocator: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
     std.debug.print("onClientSocketOpen\n", .{});
     const ctx = s.getExt(SocketCtx).?;
     ctx.backpressure = &.{};
@@ -131,11 +131,11 @@ fn onClientSocketOpen(allocator: std.mem.Allocator, s: *zs.Socket, _: bool, _: [
     return s;
 }
 
-fn onClientSocketTimeout(_: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onClientSocketTimeout(_: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
     return s;
 }
 
-fn onServerSocketTimeout(_: std.mem.Allocator, s: *zs.Socket) !*zs.Socket {
+fn onServerSocketTimeout(_: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
     return s;
 }
 
@@ -171,7 +171,7 @@ fn expectPeerVerify(allocator: std.mem.Allocator, io: std.Io, test_name: []const
     port = 3000;
     while (listen_socket == null) {
         listen_socket = blk: {
-            const tmp_listen_socket = server_context.listen(allocator, ssl, "127.0.0.1", port, 0, SocketCtx) catch break :blk null;
+            const tmp_listen_socket = server_context.listen(allocator, io, ssl, "127.0.0.1", port, 0, SocketCtx) catch break :blk null;
             break :blk tmp_listen_socket;
         };
         if (listen_socket != null) break;
@@ -187,7 +187,7 @@ fn expectPeerVerify(allocator: std.mem.Allocator, io: std.Io, test_name: []const
     client_context.setOnTimeout(ssl, &onClientSocketTimeout);
     client_context.setOnEnd(ssl, &onClientSocketEnd);
 
-    _ = try client_context.connect(allocator, ssl, "127.0.0.1", port, null, 0, SocketCtx);
+    _ = try client_context.connect(allocator, io, ssl, "127.0.0.1", port, null, 0, SocketCtx);
     try loop.run(allocator, io);
     listen_socket = null;
 
