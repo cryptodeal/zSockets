@@ -16,25 +16,28 @@ expects_loop: bool = false,
 leave_poll_ready: bool = false,
 cb: ?*const fn (std.mem.Allocator, std.Io, *Self) anyerror!void = null,
 server_data: ?*anyopaque = null,
-ext: Extension = .{},
+ext: []Extension = &.{},
 
-pub fn init(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, comptime MaybeT: ?type) !*Self {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, comptime ExtensionTypes: []const type) !*Self {
     const self = try allocator.create(Self);
+    errdefer allocator.destroy(self);
     self.* = .{
         .allocator = allocator,
         .io = io,
         .loop = loop,
-        .ext = try Extension.init(allocator, MaybeT),
+        .ext = try allocator.alloc(Extension, ExtensionTypes.len),
+    };
+    errdefer allocator.free(self.ext);
+    inline for (0..ExtensionTypes.len) |i| self.ext[i] = Extension.init(allocator, ExtensionTypes[i]) catch |e| {
+        for (0..i) |j| self.ext[j].deinit(allocator);
+        return e;
     };
     return self;
 }
 
 pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
-    self.ext.deinit(allocator);
+    for (self.ext) |*e| e.deinit(allocator);
+    allocator.free(self.ext);
     self.p.deinit(allocator, self.loop);
     allocator.destroy(self);
-}
-
-pub fn getExt(self: *Self, comptime T: type) ?*T {
-    return @ptrCast(@alignCast(self.ext.ptr));
 }

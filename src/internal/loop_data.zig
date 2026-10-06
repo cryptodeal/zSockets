@@ -32,18 +32,18 @@ iteration_count: i64 = 0,
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, wakeup_cb: *const fn (std.mem.Allocator, std.Io, *Loop) anyerror!void, pre_cb: *const fn (std.mem.Allocator, std.Io, *Loop) anyerror!void, post_cb: *const fn (std.mem.Allocator, std.Io, *Loop) anyerror!void) !Self {
     const self: Self = .{
-        .sweep_timer = try createTimer(allocator, io, loop, true, null),
+        .sweep_timer = try createTimer(allocator, io, loop, true, &.{}),
         .recv_buf = try allocator.alloc(u8, constants.recv_buffer_length + constants.recv_buffer_padding * 2),
         .pre_cb = pre_cb,
         .post_cb = post_cb,
-        .wakeup_async = try createAsync(allocator, io, loop, true, null),
+        .wakeup_async = try createAsync(allocator, io, loop, true, &.{}),
     };
     asyncSet(self.wakeup_async.?, @ptrCast(@alignCast(wakeup_cb)));
     return self;
 }
 
 pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
-    if (build_opts.ssl_impl != .no_ssl) {
+    if (comptime build_opts.ssl_impl != .no_ssl) {
         if (@as(?*openssl.LoopSslData, @ptrCast(@alignCast(self.ssl_data)))) |ssl_data| {
             ssl_data.deinit(allocator);
             self.ssl_data = null;

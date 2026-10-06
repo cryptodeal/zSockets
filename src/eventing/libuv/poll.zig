@@ -31,7 +31,7 @@ io: std.Io = undefined,
 uv_p: ?*libuv.uv_poll_t = null,
 fd_: std.posix.fd_t = undefined,
 poll_type: PollType = undefined,
-ext: Extension = .{},
+ext: []Extension = &.{},
 callback_payload: *CallbackPayload = undefined,
 
 fn pollCb(p: ?*libuv.uv_poll_t, status: c_int, events_: c_int) callconv(.c) void {
@@ -50,13 +50,18 @@ fn closeCbFreePoll(h: ?*libuv.uv_handle_t) callconv(.c) void {
     }
 }
 
-pub fn create(self: *Self, allocator: std.mem.Allocator, io: std.Io, _: *Loop, _: bool, comptime Ext: ?type) !void {
-    // TODO: set `uv_p.data` as pointer to self
+pub fn create(self: *Self, allocator: std.mem.Allocator, io: std.Io, _: *Loop, _: bool, comptime ExtensionTypes: []const type) !void {
     self.* = .{
         .io = io,
         .uv_p = try allocator.create(libuv.uv_poll_t),
-        .ext = try Extension.init(allocator, Ext),
+        .ext = try allocator.alloc(Extension, ExtensionTypes.len),
         .callback_payload = try CallbackPayload.init(allocator, self),
+    };
+    errdefer allocator.free(self.ext);
+    errdefer self.callback_payload.deinit();
+    inline for (0..ExtensionTypes.len) |i| self.ext[i] = Extension.init(allocator, ExtensionTypes[i]) catch |e| {
+        for (0..i) |j| self.ext[j].deinit(allocator);
+        return e;
     };
     self.uv_p.?.data = self.callback_payload;
 }
@@ -78,7 +83,10 @@ pub fn deinit(self: *Self, allocator: std.mem.Allocator, _: *Loop) void {
     } else {
         self.callback_payload.deinit();
     }
-    self.ext.deinit(allocator);
+    for (self.ext) |*e| {
+        e.deinit(allocator);
+    }
+    allocator.free(self.ext);
 }
 
 pub fn resize(self: *Self, _: *Loop) void {

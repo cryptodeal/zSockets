@@ -13,8 +13,10 @@ fn asyncHandler(c: ?*anyopaque) callconv(.c) void {
     };
 }
 
-pub fn createAsync(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, _: bool, comptime Ext: ?type) !*InternalCallback {
-    const cb = try InternalCallback.init(allocator, io, loop, Ext);
+pub fn createAsync(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallthrough: bool, comptime ExtensionTypes: []const type) !*InternalCallback {
+    _ = fallthrough;
+    const cb = try InternalCallback.init(allocator, io, loop, ExtensionTypes);
+    errdefer cb.deinit(allocator);
     cb.expects_loop = true;
     // if (fallthrough) {}
     return cb;
@@ -28,4 +30,6 @@ pub fn asyncWakeup(a: *InternalCallback) void {
     std.c.dispatch.async_f(std.c.dispatch.get_main_queue(), a, &asyncHandler);
 }
 
-pub fn asyncClose(_: std.mem.Allocator, _: *InternalCallback) void {}
+pub fn asyncClose(allocator: std.mem.Allocator, a: *InternalCallback) void {
+    a.deinit(allocator);
+}

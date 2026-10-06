@@ -16,7 +16,7 @@ fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 fn onEchoSocketWritable(allocator: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
-    const es = s.getExt(EchoSocket).?;
+    const es = s.ext[0].get(EchoSocket).?;
     const written = s.write(ssl, es.backpressure, false);
     if (written != es.backpressure.len) {
         const new_buffer = try allocator.alloc(u8, es.backpressure.len - written);
@@ -32,7 +32,7 @@ fn onEchoSocketWritable(allocator: std.mem.Allocator, _: std.Io, s: *zs.Socket) 
 }
 
 fn onEchoSocketClose(allocator: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
-    const es = s.getExt(EchoSocket).?;
+    const es = s.ext[0].get(EchoSocket).?;
     std.debug.print("Client disconnected\n", .{});
     allocator.free(es.backpressure);
     return s;
@@ -44,7 +44,7 @@ fn onEchoSocketEnd(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs
 }
 
 fn onEchoSocketData(allocator: std.mem.Allocator, _: std.Io, s: *zs.Socket, data: []u8) !*zs.Socket {
-    const es = s.getExt(EchoSocket).?;
+    const es = s.ext[0].get(EchoSocket).?;
     std.debug.print("Client sent: {s}", .{data});
     const written = s.write(ssl, data, false);
     if (written != data.len) {
@@ -59,7 +59,7 @@ fn onEchoSocketData(allocator: std.mem.Allocator, _: std.Io, s: *zs.Socket, data
 }
 
 fn onEchoSocketOpen(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
-    const es = s.getExt(EchoSocket).?;
+    const es = s.ext[0].get(EchoSocket).?;
     es.backpressure = &[_]u8{};
     s.setTimeout(ssl, 30);
     std.debug.print("Client connected\n", .{});
@@ -78,7 +78,7 @@ pub fn main(init: std.process.Init) !void {
 
     const allocator = std.heap.smp_allocator;
 
-    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, null);
+    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, &.{});
     defer loop.deinit(allocator);
 
     // TODO: enable SSL and pass relevant options
@@ -87,7 +87,7 @@ pub fn main(init: std.process.Init) !void {
         .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
         .passphrase = "1234",
     };
-    const echo_context = try zs.SocketContext.init(allocator, ssl, loop, options, EchoContext);
+    const echo_context = try zs.SocketContext.init(allocator, ssl, loop, options, &.{EchoContext});
     // TODO: implement `SocketContext.deinit`
     defer echo_context.deinit(allocator);
 
@@ -98,7 +98,7 @@ pub fn main(init: std.process.Init) !void {
     echo_context.setOnTimeout(ssl, &onEchoSocketTimeout);
     echo_context.setOnEnd(ssl, &onEchoSocketEnd);
 
-    if (echo_context.listen(allocator, init.io, ssl, null, 3000, 0, EchoSocket)) |_| {
+    if (echo_context.listen(allocator, init.io, ssl, null, 3000, 0, &.{EchoSocket})) |_| {
         std.debug.print("Listening on port 3000...\n", .{});
         try loop.run(allocator, init.io);
     } else |_| {

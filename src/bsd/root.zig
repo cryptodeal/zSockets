@@ -384,14 +384,6 @@ pub fn recv(fd: std.posix.socket_t, buf: []u8, flags: i32) isize {
 pub fn write2(fd: std.posix.socket_t, header: []const u8, payload: []const u8) isize {
     switch (builtin.os.tag) {
         .windows => {
-            var chunks: [2]std.c.iovec = undefined;
-            chunks[0].base = @constCast(header.ptr);
-            chunks[0].len = header.len;
-            chunks[1].base = @constCast(payload.ptr);
-            chunks[1].len = payload.len;
-            return std.c.writev(fd, (&chunks).ptr, 2);
-        },
-        else => {
             var written = send(fd, header, false);
             if (written == @as(isize, @intCast(header.len))) {
                 const second_write = send(fd, payload, false);
@@ -401,12 +393,20 @@ pub fn write2(fd: std.posix.socket_t, header: []const u8, payload: []const u8) i
             }
             return written;
         },
+        else => {
+            var chunks: [2]std.c.iovec = undefined;
+            chunks[0].base = @constCast(header.ptr);
+            chunks[0].len = header.len;
+            chunks[1].base = @constCast(payload.ptr);
+            chunks[1].len = payload.len;
+            return std.c.writev(fd, @ptrCast(@alignCast(&chunks)), 2);
+        },
     }
 }
 
 pub fn send(fd: std.posix.socket_t, buf: []const u8, msg_more: bool) isize {
-    const msg_nosignal = if (@hasDecl(std.posix.MSG, "NOSIGNAL")) std.c.MSG.NOSIGNAL else 0;
-    if (@hasDecl(std.posix.MSG, "MORE"))
+    const msg_nosignal = if (@hasDecl(std.c.MSG, "NOSIGNAL")) std.c.MSG.NOSIGNAL else 0;
+    if (@hasDecl(std.c.MSG, "MORE"))
         return std.c.send(fd, @ptrCast(@alignCast(buf.ptr)), buf.len, @as(u32, @intCast(@intFromBool(msg_more))) * std.c.MSG.MORE | msg_nosignal)
     else
         return std.c.send(fd, @ptrCast(@alignCast(buf.ptr)), buf.len, msg_nosignal);
@@ -643,9 +643,6 @@ pub fn createConnectSocket(host: [:0]const u8, port: u32, source_host: ?[:0]cons
     var hints: std.posix.addrinfo = std.mem.zeroInit(std.posix.addrinfo, .{
         .family = std.posix.AF.UNSPEC,
         .socktype = std.posix.SOCK.STREAM,
-        .flags = .{
-            .ADDRCONFIG = true,
-        },
     });
     var result: ?*std.posix.addrinfo = null;
 

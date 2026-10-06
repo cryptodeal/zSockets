@@ -32,7 +32,7 @@ fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 fn writeBuffered(allocator: std.mem.Allocator, ssl_: bool, s: *zs.Socket, data: []const u8) !usize {
-    const ctx = s.getExt(SocketCtx).?;
+    const ctx = s.ext[0].get(SocketCtx).?;
     const written = s.write(ssl_, data, false);
     if (written != data.len) {
         const new_buffer = try allocator.alloc(u8, ctx.backpressure.len + data.len - written);
@@ -45,7 +45,7 @@ fn writeBuffered(allocator: std.mem.Allocator, ssl_: bool, s: *zs.Socket, data: 
 }
 
 fn writeBackpressure(allocator: std.mem.Allocator, ssl_: bool, s: *zs.Socket) !void {
-    const ctx = s.getExt(SocketCtx).?;
+    const ctx = s.ext[0].get(SocketCtx).?;
     const written = s.write(ssl_, ctx.backpressure, false);
     if (written != ctx.backpressure.len) {
         const new_buffer = try allocator.alloc(u8, ctx.backpressure.len - written);
@@ -116,7 +116,7 @@ fn onClientSocketData(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, d
 
 fn onServerSocketOpen(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
     std.debug.print("onServerSocketOpen\n", .{});
-    const ctx = s.getExt(SocketCtx).?;
+    const ctx = s.ext[0].get(SocketCtx).?;
     ctx.backpressure = &.{};
     s.setTimeout(ssl, 30);
     std.debug.print("Client connected\n", .{});
@@ -125,7 +125,7 @@ fn onServerSocketOpen(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: bool, _
 
 fn onClientSocketOpen(allocator: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
     std.debug.print("onClientSocketOpen\n", .{});
-    const ctx = s.getExt(SocketCtx).?;
+    const ctx = s.ext[0].get(SocketCtx).?;
     ctx.backpressure = &.{};
     _ = try writeBuffered(allocator, ssl, s, client_msg);
     return s;
@@ -156,10 +156,10 @@ fn expectPeerVerify(allocator: std.mem.Allocator, io: std.Io, test_name: []const
     server_received_data = false;
     client_received_data = false;
 
-    const loop = try zs.Loop.init(allocator, io, null, &onWakeup, &onPre, &onPost, null);
+    const loop = try zs.Loop.init(allocator, io, null, &onWakeup, &onPre, &onPost, &.{});
     defer loop.deinit(allocator);
 
-    server_context = try zs.SocketContext.init(allocator, ssl, loop, server_options, null);
+    server_context = try zs.SocketContext.init(allocator, ssl, loop, server_options, &.{});
     defer server_context.deinit(allocator);
     server_context.setOnOpen(ssl, &onServerSocketOpen);
     server_context.setOnData(ssl, &onServerSocketData);
@@ -171,14 +171,14 @@ fn expectPeerVerify(allocator: std.mem.Allocator, io: std.Io, test_name: []const
     port = 3000;
     while (listen_socket == null) {
         listen_socket = blk: {
-            const tmp_listen_socket = server_context.listen(allocator, io, ssl, "127.0.0.1", port, 0, SocketCtx) catch break :blk null;
+            const tmp_listen_socket = server_context.listen(allocator, io, ssl, "127.0.0.1", port, 0, &.{SocketCtx}) catch break :blk null;
             break :blk tmp_listen_socket;
         };
         if (listen_socket != null) break;
         port += 1;
     }
     std.debug.print("Server listening on 127.0.0.1:{d}\n", .{port});
-    client_context = try zs.SocketContext.init(allocator, ssl, loop, client_options, null);
+    client_context = try zs.SocketContext.init(allocator, ssl, loop, client_options, &.{});
     defer client_context.deinit(allocator);
     client_context.setOnOpen(ssl, &onClientSocketOpen);
     client_context.setOnData(ssl, &onClientSocketData);
@@ -187,7 +187,7 @@ fn expectPeerVerify(allocator: std.mem.Allocator, io: std.Io, test_name: []const
     client_context.setOnTimeout(ssl, &onClientSocketTimeout);
     client_context.setOnEnd(ssl, &onClientSocketEnd);
 
-    _ = try client_context.connect(allocator, io, ssl, "127.0.0.1", port, null, 0, SocketCtx);
+    _ = try client_context.connect(allocator, io, ssl, "127.0.0.1", port, null, 0, &.{SocketCtx});
     try loop.run(allocator, io);
     listen_socket = null;
 

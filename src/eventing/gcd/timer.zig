@@ -11,9 +11,10 @@ fn gcdTimerHandler(t: ?*anyopaque) callconv(.c) void {
     };
 }
 
-pub fn createTimer(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallthrough: bool, comptime Ext: ?type) !*Timer {
+pub fn createTimer(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallthrough: bool, comptime ExtensionTypes: []const type) !*Timer {
     _ = fallthrough;
-    const cb = try InternalCallback.init(allocator, io, loop, Ext);
+    const cb = try InternalCallback.init(allocator, io, loop, ExtensionTypes);
+    errdefer cb.deinit(allocator);
     const gcd_timer = std.c.dispatch.source_create(std.c.dispatch.SOURCE_TYPE_TIMER, 0, @bitCast(@as(usize, 0)), std.c.dispatch.get_main_queue());
     cb.server_data = gcd_timer.?;
     std.c.dispatch.source_set_event_handler_f(gcd_timer.?, &gcdTimerHandler);
@@ -22,8 +23,8 @@ pub fn createTimer(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallth
     return cb;
 }
 
-pub fn getTimerExt(t: *Timer, comptime T: type) ?*T {
-    return @as(*InternalCallback, @ptrCast(@alignCast(t))).getExt(T);
+pub fn getTimerExt(t: *Timer, idx: usize, comptime T: type) ?*T {
+    return @as(*InternalCallback, @ptrCast(@alignCast(t))).ext[idx].get(T);
 }
 
 pub fn timerSet(t: *Timer, cb: ?*const fn (std.mem.Allocator, std.Io, *Timer) anyerror!void, ms: i64, _: i64) void {
@@ -35,4 +36,7 @@ pub fn timerSet(t: *Timer, cb: ?*const fn (std.mem.Allocator, std.Io, *Timer) an
     std.c.dispatch.activate(gcd_timer.as_object());
 }
 
-pub fn timerClose(_: std.mem.Allocator, _: *Timer) void {}
+pub fn timerClose(allocator: std.mem.Allocator, t: *Timer) void {
+    const internal_cb: *InternalCallback = @ptrCast(@alignCast(t));
+    internal_cb.deinit(allocator);
+}

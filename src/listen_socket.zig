@@ -9,24 +9,31 @@ const Socket = @import("socket.zig");
 const Self = @This();
 
 s: Socket,
-ext: Extension = .{},
+// ext: []Extension = &.{},
 
-pub fn init(allocator: std.mem.Allocator, context: *SocketContext, comptime MaybeT: ?type) !*Self {
+pub fn init(allocator: std.mem.Allocator, context: *SocketContext, comptime ExtensionTypes: []const type) !*Self {
     const self = try allocator.create(Self);
+    errdefer allocator.destroy(self);
     self.* = .{
         .s = .{
             .context = context,
             .ls_field_ptr = true,
-            .ext = try Extension.init(allocator, MaybeT),
+            .ext = try allocator.alloc(Extension, ExtensionTypes.len),
         },
+    };
+    errdefer allocator.free(self.s.ext);
+    inline for (0..ExtensionTypes.len) |i| self.s.ext[i] = Extension.init(allocator, ExtensionTypes[i]) catch |e| {
+        for (0..i) |j| self.s.ext[j].deinit(allocator);
+        return e;
     };
     return self;
 }
 
 pub fn deinit(self: *Self, allocator: std.mem.Allocator, loop: *Loop) void {
     self.s.p.deinit(allocator, loop);
-    self.s.ext.deinit(allocator);
-    self.ext.deinit(allocator);
+    for (self.s.ext) |*e| e.deinit(allocator);
+    allocator.free(self.s.ext);
+    // self.ext.deinit(allocator);
     allocator.destroy(self);
 }
 

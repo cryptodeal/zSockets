@@ -42,12 +42,12 @@ pub fn main(init: std.process.Init) !void {
 
     const allocator = std.heap.smp_allocator;
 
-    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, null);
+    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, &.{});
     defer loop.deinit(allocator);
 
     // TODO: enable SSL and pass relevant options
     const options: zs.SocketContextOptions = .{};
-    const http_context = try zs.SocketContext.init(allocator, false, loop, options, null);
+    const http_context = try zs.SocketContext.init(allocator, false, loop, options, &.{});
     // TODO: implement `SocketContext.deinit`
     defer http_context.deinit(allocator);
 
@@ -58,7 +58,7 @@ pub fn main(init: std.process.Init) !void {
     http_context.setOnTimeout(false, &onHttpSocketTimeout);
     http_context.setOnEnd(false, &onHttpSocketEnd);
 
-    if (http_context.listen(allocator, init.io, false, null, 3000, 0, null)) |_| {
+    if (http_context.listen(allocator, init.io, false, null, 3000, 0, &.{})) |_| {
         std.debug.print("Listening on port 3000...\n", .{});
         try loop.run(allocator, init.io);
     } else |_| {

@@ -17,7 +17,7 @@ uv_loop: *libuv.uv_loop_t,
 is_default: bool,
 uv_pre: *UvWrapper(libuv.uv_prepare_t),
 uv_check: *UvWrapper(libuv.uv_check_t),
-ext: Extension = .{},
+ext: []Extension = &.{},
 
 fn prepareCb(p: ?*libuv.uv_prepare_t) callconv(.c) void {
     const loop: *Self = @ptrCast(@alignCast(p.?.data));
@@ -35,8 +35,9 @@ fn checkCb(p: ?*libuv.uv_check_t) callconv(.c) void {
     };
 }
 
-pub fn init(allocator: std.mem.Allocator, io: std.Io, hint: ?*anyopaque, wakeup_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, pre_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, post_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, comptime MaybeT: ?type) !*Self {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, hint: ?*anyopaque, wakeup_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, pre_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, post_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, comptime ExtensionTypes: []const type) !*Self {
     const self = try allocator.create(Self);
+    errdefer allocator.destroy(self);
     self.* = .{
         .allocator = allocator,
         .io = io,
@@ -45,7 +46,14 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, hint: ?*anyopaque, wakeup_
         .uv_pre = try UvWrapper(libuv.uv_prepare_t).init(allocator),
         .uv_check = try UvWrapper(libuv.uv_check_t).init(allocator),
         .data = try LoopData.init(allocator, io, self, wakeup_cb, pre_cb, post_cb),
-        .ext = try Extension.init(allocator, MaybeT),
+        .ext = try allocator.alloc(Extension, ExtensionTypes.len),
+    };
+    errdefer allocator.destroy(self.uv_pre);
+    errdefer allocator.destroy(self.uv_check);
+    errdefer allocator.free(self.ext);
+    inline for (0..ExtensionTypes.len) |i| self.ext[i] = Extension.init(allocator, ExtensionTypes[i]) catch |e| {
+        for (0..i) |j| self.ext[j].deinit(allocator);
+        return e;
     };
     _ = libuv.uv_prepare_init(self.uv_loop, self.uv_pre.ptr());
     _ = libuv.uv_prepare_start(self.uv_pre.ptr(), &prepareCb);
@@ -77,7 +85,8 @@ pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
         _ = libuv.uv_run(self.uv_loop, libuv.UV_RUN_NOWAIT);
         libuv.uv_loop_delete(self.uv_loop);
     }
-    self.ext.deinit(allocator);
+    for (self.ext) |*e| e.deinit(allocator);
+    allocator.free(self.ext);
     allocator.destroy(self);
 }
 
@@ -88,8 +97,4 @@ fn pump(self: *Self) void {
 pub fn run(self: *Self, _: std.mem.Allocator, _: std.Io) !void {
     loop_.integrate(self);
     _ = libuv.uv_run(self.uv_loop, libuv.UV_RUN_DEFAULT);
-}
-
-pub fn getExt(self: *Self, comptime T: type) ?*T {
-    return @ptrCast(@alignCast(self.ext.ptr));
 }

@@ -14,10 +14,10 @@ ready_polls_count: u32 = 0,
 current_ready_poll: u32 = 0,
 fd: std.posix.fd_t,
 ready_polls: if (build_opts.event_backend == .epoll) [1024]std.os.linux.epoll_event else [1024]std.posix.Kevent = undefined,
-ext: Extension = .{},
+ext: []Extension = &.{},
 
 fn getReadyPoll(self: *Self, index: u32) ?*Poll {
-    if (build_opts.event_backend == .epoll) {
+    if (comptime build_opts.event_backend == .epoll) {
         return @ptrFromInt(self.ready_polls[index].data.ptr);
     } else {
         return @ptrFromInt(self.ready_polls[index].udata);
@@ -25,7 +25,7 @@ fn getReadyPoll(self: *Self, index: u32) ?*Poll {
 }
 
 fn setReadyPoll(self: *Self, index: u32, poll: ?*Poll) void {
-    if (build_opts.event_backend == .epoll) {
+    if (comptime build_opts.event_backend == .epoll) {
         self.ready_polls[index].data.ptr = @intFromPtr(poll);
     } else {
         self.ready_polls[index].udata = @intFromPtr(poll);
@@ -33,13 +33,18 @@ fn setReadyPoll(self: *Self, index: u32, poll: ?*Poll) void {
 }
 
 // unused `hint: ?*anyopaque`
-pub fn init(allocator: std.mem.Allocator, io: std.Io, _: ?*anyopaque, wakeup_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, pre_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, post_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, comptime MaybeT: ?type) !*Self {
+pub fn init(allocator: std.mem.Allocator, io: std.Io, _: ?*anyopaque, wakeup_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, pre_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, post_cb: *const fn (std.mem.Allocator, std.Io, *Self) anyerror!void, comptime ExtensionTypes: []const type) !*Self {
     const self = try allocator.create(Self);
     errdefer allocator.destroy(self);
     self.* = .{
         .data = undefined,
-        .fd = if (build_opts.event_backend == .epoll) @intCast(std.os.linux.epoll_create1(std.os.linux.EPOLL.CLOEXEC)) else std.c.kqueue(),
-        .ext = try Extension.init(allocator, MaybeT),
+        .fd = if (comptime build_opts.event_backend == .epoll) @intCast(std.os.linux.epoll_create1(std.os.linux.EPOLL.CLOEXEC)) else std.c.kqueue(),
+        .ext = try allocator.alloc(Extension, ExtensionTypes.len),
+    };
+    errdefer allocator.free(self.ext);
+    inline for (0..ExtensionTypes.len) |i| self.ext[i] = Extension.init(allocator, ExtensionTypes[i]) catch |e| {
+        for (0..i) |j| self.ext[j].deinit(allocator);
+        return e;
     };
     self.data = try LoopData.init(allocator, io, self, wakeup_cb, pre_cb, post_cb);
     return self;
@@ -48,7 +53,8 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, _: ?*anyopaque, wakeup_cb:
 pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
     self.data.deinit(allocator);
     _ = std.c.close(self.fd);
-    self.ext.deinit(allocator);
+    for (self.ext) |*e| e.deinit(allocator);
+    allocator.free(self.ext);
     allocator.destroy(self);
 }
 
@@ -56,7 +62,7 @@ pub fn run(self: *Self, allocator: std.mem.Allocator, io: std.Io) !void {
     loop.integrate(self);
     while (self.polls_count != 0) {
         try loop.pre(allocator, io, self);
-        if (build_opts.event_backend == .epoll) {
+        if (comptime build_opts.event_backend == .epoll) {
             self.ready_polls_count = @intCast(std.os.linux.epoll_wait(self.fd, &self.ready_polls, 1024, -1));
         } else {
             // added timeout (whereas none in uSockets impl)
@@ -68,7 +74,7 @@ pub fn run(self: *Self, allocator: std.mem.Allocator, io: std.Io) !void {
             if (self.getReadyPoll(self.current_ready_poll)) |p| {
                 var events: u32 = undefined;
                 var err: u32 = undefined;
-                if (build_opts.event_backend == .epoll) {
+                if (comptime build_opts.event_backend == .epoll) {
                     events = self.ready_polls[self.current_ready_poll].events;
                     err = self.ready_polls[self.current_ready_poll].events & (std.os.linux.EPOLL.ERR | std.os.linux.EPOLL.HUP);
                 } else {
@@ -89,7 +95,7 @@ pub fn run(self: *Self, allocator: std.mem.Allocator, io: std.Io) !void {
 }
 
 pub fn updatePendingReadyPolls(self: *Self, old_poll: ?*Poll, new_poll: ?*Poll, _: u32, _: u32) void {
-    var num_entries_possibly_remaining: u32 = if (build_opts.event_backend == .epoll) 1 else 2;
+    var num_entries_possibly_remaining: u32 = if (comptime build_opts.event_backend == .epoll) 1 else 2;
     var i = self.current_ready_poll;
     while (i < self.ready_polls_count and num_entries_possibly_remaining != 0) : (i += 1) {
         // TODO: need to verify that `old_poll` can be null
@@ -98,8 +104,4 @@ pub fn updatePendingReadyPolls(self: *Self, old_poll: ?*Poll, new_poll: ?*Poll, 
             num_entries_possibly_remaining -= 1;
         }
     }
-}
-
-pub fn getExt(self: *Self, comptime T: type) ?*T {
-    return @ptrCast(@alignCast(self.ext.ptr));
 }

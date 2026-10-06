@@ -53,7 +53,7 @@ pub const Socket = struct {
         };
         std.debug.print("The port of UDP is: {d}\n", .{self.port});
         // `errdefer` is not necessary as we don't allocate anything for the poll here (extension is `null`)
-        try self.cb.p.create(allocator, io, loop, false, null);
+        try self.cb.p.create(allocator, io, loop, false, &.{});
         self.cb.p.init(fd, .callback);
         self.cb.p.start(self.cb.loop, socket_readable);
         return self;

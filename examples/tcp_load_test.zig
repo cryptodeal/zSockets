@@ -1,4 +1,4 @@
-const argsParser = @import("args");
+const args_parser = @import("args");
 const std = @import("std");
 const zs = @import("zSockets");
 
@@ -49,7 +49,7 @@ fn onHttpSocketOpen(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, _: 
     _ = s.write(ssl, request, false);
     connections -= 1;
     if (connections != 0) {
-        _ = try s.context.connect(allocator, io, ssl, host, port, null, 0, null);
+        _ = try s.context.connect(allocator, io, ssl, host, port, null, 0, &.{});
     } else {
         std.debug.print("Running benchmark now...\n", .{});
         s.setTimeout(ssl, zs.constants.timeout_granularity);
@@ -77,7 +77,7 @@ fn onHttpSocketConnectError(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: i
 }
 
 pub fn main(init: std.process.Init) !void {
-    const args = try argsParser.parseForCurrentProcess(Options, init, .print);
+    const args = try args_parser.parseForCurrentProcess(Options, init, .print);
     defer args.deinit();
 
     // var gpa = std.heap.DebugAllocator(.{}){};
@@ -90,12 +90,12 @@ pub fn main(init: std.process.Init) !void {
     port = args.options.port;
     connections = args.options.connections;
 
-    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, null);
+    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, &.{});
     defer loop.deinit(allocator);
 
     // TODO: enable SSL and pass relevant options
     const options: zs.SocketContextOptions = .{};
-    const http_context = try zs.SocketContext.init(allocator, ssl, loop, options, null);
+    const http_context = try zs.SocketContext.init(allocator, ssl, loop, options, &.{});
     // TODO: implement `SocketContext.deinit`
     defer http_context.deinit(allocator);
 
@@ -108,7 +108,7 @@ pub fn main(init: std.process.Init) !void {
     http_context.setOnEnd(ssl, &onHttpSocketEnd);
     http_context.setOnConnectError(ssl, &onHttpSocketConnectError);
 
-    if (http_context.connect(allocator, init.io, ssl, host, port, null, 0, null)) |_| {} else |err| {
+    if (http_context.connect(allocator, init.io, ssl, host, port, null, 0, &.{})) |_| {} else |err| {
         std.debug.print("Cannot connect to server\n", .{});
         return err;
     }

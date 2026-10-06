@@ -65,7 +65,7 @@ fn onStreamHeaders(_: std.mem.Allocator, _: std.Io, s: ?*anyopaque) !void {
     //print_current_headers();
 
     // Make a new stream
-    zs.quic.streamSocket(s).createStream(null);
+    zs.quic.streamSocket(s).createStream(&.{});
 }
 
 fn onStreamData(_: std.mem.Allocator, _: std.Io, _: ?*anyopaque, _: []u8) !void {}
@@ -78,16 +78,16 @@ var ignore = false;
 
 fn onStart(allocator: std.mem.Allocator, io: std.Io, _: *zs.Timer) !void {
     if (num_sockets < 10) {
-        _ = try context.connect(allocator, io, "::1", 9004, null);
+        _ = try context.connect(allocator, io, "::1", 9004, &.{});
     } else {
         if (!ignore) {
-            const delay_timer = try zs.createTimer(allocator, io, loop, false, null);
+            const delay_timer = try zs.createTimer(allocator, io, loop, false, &.{});
             zs.timerSet(delay_timer, &onPrint, 1000, 1000);
             ignore = true;
             std.debug.print("Starting now\n", .{});
             for (0..num_sockets) |i| {
                 for (0..32) |_| {
-                    sockets[i].createStream(null);
+                    sockets[i].createStream(&.{});
                 }
             }
         }
@@ -129,12 +129,12 @@ pub fn main(init: std.process.Init) !void {
 
     const allocator = std.heap.smp_allocator;
 
-    loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, null);
+    loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, &.{});
     defer loop.deinit(allocator);
 
     const options: zs.quic.SocketContext.Options = .{};
 
-    context = try zs.quic.SocketContext.init(allocator, init.io, loop, options, null);
+    context = try zs.quic.SocketContext.init(allocator, init.io, loop, options, &.{});
     context.setOnStreamData(&onStreamData);
     context.setOnStreamOpen(&onStreamOpen);
     context.setOnStreamClose(&onStreamClose);
@@ -143,7 +143,7 @@ pub fn main(init: std.process.Init) !void {
     context.setOnOpen(&onOpen);
     context.setOnClose(&onClose);
 
-    const start_timer = try zs.createTimer(allocator, init.io, loop, false, null);
+    const start_timer = try zs.createTimer(allocator, init.io, loop, false, &.{});
     defer zs.timerClose(allocator, start_timer);
     zs.timerSet(start_timer, &onStart, 100, 100);
 

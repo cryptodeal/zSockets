@@ -60,7 +60,7 @@ var rand: std.Random = undefined;
 
 fn assumeState(s: *zs.Socket, is_http: bool) void {
     if (is_http) {
-        const hs = s.getExt(HttpSocket).?;
+        const hs = s.ext[0].get(HttpSocket).?;
         if (hs.pad_invariant != pad_should_always_be or hs.post_pad_invariant != pad_should_always_be) {
             std.debug.print("ERROR: Pad invariant is not correct!\n", .{});
             // std.debug.print("Failed socket ptr: {d}\n", .{@intFromPtr(s)});
@@ -73,7 +73,7 @@ fn assumeState(s: *zs.Socket, is_http: bool) void {
         }
         @memset(&hs.content, 0);
     } else {
-        const hs = s.getExt(WebSocket).?;
+        const hs = s.ext[0].get(WebSocket).?;
         if (hs.pad_invariant != pad_should_always_be or hs.post_pad_invariant != pad_should_always_be) {
             std.debug.print("ERROR: Pad invariant is not correct!\n", .{});
             // std.debug.print("Failed socket ptr: {d}\n", .{@intFromPtr(s)});
@@ -99,12 +99,12 @@ fn performRandomOperation(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socke
         1 => {
             if (!s_.isClosed(ssl)) {
                 if ((rand.int(u32) % 2) != 0) {
-                    s_ = try websocket_context.adoptSocket(allocator, ssl, s_, WebSocket);
-                    const hs = s_.getExt(WebSocket).?;
+                    s_ = try websocket_context.adoptSocket(allocator, ssl, s_, &.{WebSocket});
+                    const hs = s_.ext[0].get(WebSocket).?;
                     hs.is_http = false;
                 } else {
-                    s_ = try http_context.adoptSocket(allocator, ssl, s_, HttpSocket);
-                    const hs = s_.getExt(HttpSocket).?;
+                    s_ = try http_context.adoptSocket(allocator, ssl, s_, &.{HttpSocket});
+                    const hs = s_.ext[0].get(HttpSocket).?;
                     hs.is_http = true;
                 }
             }
@@ -147,7 +147,7 @@ fn onHttpSocketWritable(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket)
 
 fn onWebSocketClose(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
     assumeState(s, false);
-    const ws: *WebSocket = s.getExt(WebSocket).?;
+    const ws: *WebSocket = s.ext[0].get(WebSocket).?;
     if (ws.is_client) {
         closed_clients += 1;
     } else {
@@ -169,7 +169,7 @@ fn onWebSocketClose(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, _: 
 
 fn onHttpSocketClose(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, _: i32, _: ?*anyopaque) !*zs.Socket {
     assumeState(s, true);
-    const hs: *HttpSocket = s.getExt(HttpSocket).?;
+    const hs: *HttpSocket = s.ext[0].get(HttpSocket).?;
     if (hs.is_client) {
         closed_clients += 1;
     } else {
@@ -232,7 +232,7 @@ fn nextConnection(allocator: std.mem.Allocator, io: std.Io) !*zs.Socket {
         std.debug.print("ERROR! next_connection called when already having made all!\n", .{});
         std.c.abort();
     }
-    if (http_context.connect(allocator, io, ssl, "127.0.0.1", 3000, null, 0, HttpSocket)) |connection_socket| {
+    if (http_context.connect(allocator, io, ssl, "127.0.0.1", 3000, null, 0, &.{HttpSocket})) |connection_socket| {
         return connection_socket;
     } else |_| {
         std.debug.print("FAILED TO START CONNECTION, WILL EXIT NOW\n", .{});
@@ -252,7 +252,7 @@ fn onWebSocketConnectError(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: i3
 }
 
 fn onHttpSocketOpen(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, is_client: bool, _: []u8) !*zs.Socket {
-    const hs = s.getExt(HttpSocket).?;
+    const hs = s.ext[0].get(HttpSocket).?;
     hs.is_http = true;
     hs.pad_invariant = pad_should_always_be;
     hs.post_pad_invariant = pad_should_always_be;
@@ -322,7 +322,7 @@ pub fn main(init: std.process.Init) !void {
     long_buffer = try allocator.alloc(u8, long_length);
     defer allocator.free(long_buffer);
 
-    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, null);
+    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, &.{});
     defer loop.deinit(allocator);
 
     // TODO: enable SSL and pass relevant options
@@ -331,7 +331,7 @@ pub fn main(init: std.process.Init) !void {
         .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
         .passphrase = "1234",
     };
-    http_context = try zs.SocketContext.init(allocator, ssl, loop, options, HttpContext);
+    http_context = try zs.SocketContext.init(allocator, ssl, loop, options, &.{HttpContext});
     defer http_context.deinit(allocator);
 
     http_context.setOnOpen(ssl, &onHttpSocketOpen);
@@ -342,7 +342,7 @@ pub fn main(init: std.process.Init) !void {
     http_context.setOnEnd(ssl, &onHttpSocketEnd);
     http_context.setOnConnectError(ssl, &onHttpSocketConnectError);
 
-    websocket_context = try http_context.createChildContext(allocator, ssl, HttpContext);
+    websocket_context = try http_context.createChildContext(allocator, ssl, &.{HttpContext});
     defer websocket_context.deinit(allocator);
 
     websocket_context.setOnOpen(ssl, &onWebSocketOpen);
@@ -353,7 +353,7 @@ pub fn main(init: std.process.Init) !void {
     websocket_context.setOnEnd(ssl, &onWebSocketEnd);
     websocket_context.setOnConnectError(ssl, &onWebSocketConnectError);
 
-    listen_socket = http_context.listen(allocator, init.io, ssl, "127.0.0.1", 3000, 0, HttpSocket) catch |err| {
+    listen_socket = http_context.listen(allocator, init.io, ssl, "127.0.0.1", 3000, 0, &.{HttpSocket}) catch |err| {
         std.debug.print("Cannot listen to port 3000!\n", .{});
         return err;
     };

@@ -57,12 +57,12 @@ pub fn main(init: std.process.Init) !void {
 
     const allocator = std.heap.smp_allocator;
 
-    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, null);
+    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, &.{});
     defer loop.deinit(allocator);
 
     const options: zs.quic.SocketContext.Options = .{};
 
-    context = try zs.quic.SocketContext.init(allocator, init.io, loop, options, null);
+    context = try zs.quic.SocketContext.init(allocator, init.io, loop, options, &.{});
     context.setOnStreamData(&onStreamData);
     context.setOnStreamOpen(&onStreamOpen);
     context.setOnStreamClose(&onStreamClose);
@@ -71,7 +71,7 @@ pub fn main(init: std.process.Init) !void {
     context.setOnOpen(&onOpen);
     context.setOnClose(&onClose);
 
-    _ = try context.listen(allocator, init.io, "::1", 9004, null);
+    _ = try context.listen(allocator, init.io, "::1", 9004, &.{});
     // defer listen_socket.deinit(allocator);
 
     // Run the event loop

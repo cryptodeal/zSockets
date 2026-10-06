@@ -25,9 +25,11 @@ fn closeCbFree(t: ?*libuv.uv_handle_t) callconv(.c) void {
     // TODO: probably need to free timer here as well
 }
 
-pub fn createTimer(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallthrough: bool, comptime Ext: ?type) !*Timer {
-    const cb = try InternalCallback.init(allocator, io, loop, Ext);
+pub fn createTimer(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallthrough: bool, comptime ExtensionTypes: []const type) !*Timer {
+    const cb = try InternalCallback.init(allocator, io, loop, ExtensionTypes);
+    errdefer cb.deinit(allocator);
     cb.p.callback_payload = try Poll.CallbackPayload.init(allocator, &cb.p);
+    errdefer cb.p.callback_payload.deinit();
     const uv_timer = try allocator.create(libuv.uv_timer_t);
     _ = libuv.uv_timer_init(loop.uv_loop, uv_timer);
     uv_timer.data = cb;
@@ -38,8 +40,8 @@ pub fn createTimer(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallth
     return cb;
 }
 
-pub fn getTimerExt(t: *Timer, comptime T: type) ?*T {
-    return @as(*InternalCallback, @ptrCast(@alignCast(t))).getExt(T);
+pub fn getTimerExt(t: *Timer, idx: usize, comptime T: type) ?*T {
+    return @as(*InternalCallback, @ptrCast(@alignCast(t))).ext[idx].get(T);
 }
 
 pub fn timerSet(t: *Timer, cb: ?*const fn (std.mem.Allocator, std.Io, *Timer) anyerror!void, ms: i64, repeat_ms: i64) void {
@@ -60,4 +62,5 @@ pub fn timerClose(_: std.mem.Allocator, timer: *Timer) void {
     _ = libuv.uv_timer_stop(uv_timer);
     uv_timer.?.data = internal_cb;
     libuv.uv_close(@ptrCast(@alignCast(uv_timer)), &closeCbFree);
+    // internal_cb.deinit(allocator);
 }

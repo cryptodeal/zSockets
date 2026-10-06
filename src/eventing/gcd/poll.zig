@@ -16,7 +16,7 @@ gcd_read: std.c.dispatch.source_t = undefined,
 gcd_write: std.c.dispatch.source_t = undefined,
 fd_: std.posix.fd_t = undefined,
 poll_type: PollType = .socket,
-ext: Extension = .{},
+ext: []Extension = &.{},
 
 fn gcdReadHandler(p: ?*anyopaque) callconv(.c) void {
     const poll: *Self = @ptrCast(@alignCast(p));
@@ -34,11 +34,16 @@ fn gcdWriteHandler(p: ?*anyopaque) callconv(.c) void {
     };
 }
 
-pub fn create(self: *Self, allocator: std.mem.Allocator, io: std.Io, _: *Loop, _: bool, comptime Ext: ?type) !void {
+pub fn create(self: *Self, allocator: std.mem.Allocator, io: std.Io, _: *Loop, _: bool, comptime ExtensionTypes: []const type) !void {
     self.* = .{
         .allocator = allocator,
         .io = io,
-        .ext = try Extension.init(allocator, Ext),
+        .ext = try allocator.alloc(Extension, ExtensionTypes.len),
+    };
+    errdefer allocator.free(self.ext);
+    inline for (0..ExtensionTypes.len) |i| self.ext[i] = Extension.init(allocator, ExtensionTypes[i]) catch |e| {
+        for (0..i) |j| self.ext[j].deinit(allocator);
+        return e;
     };
 }
 
@@ -59,7 +64,8 @@ pub fn deinit(self: *Self, allocator: std.mem.Allocator, loop: *Loop) void {
     self.change(loop, constants.socket_readable | constants.socket_writable);
     std.c.dispatch.release(self.gcd_read.as_object());
     std.c.dispatch.release(self.gcd_write.as_object());
-    self.ext.deinit(allocator);
+    for (self.ext) |*e| e.deinit(allocator);
+    allocator.free(self.ext);
 }
 
 pub fn resize(_: *Self, _: *Loop) void {

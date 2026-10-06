@@ -71,22 +71,24 @@ pub const SslSocketContext = struct {
     // TODO: might be able to type this more accurately
     sni: ?*anyopaque = null,
 
-    pub fn init(allocator: std.mem.Allocator, loop: *Loop, options: SocketContextOptions, comptime MaybeT: ?type) !*SslSocketContext {
+    pub fn init(allocator: std.mem.Allocator, loop: *Loop, options: SocketContextOptions, comptime ExtensionTypes: []const type) !*SslSocketContext {
         try initLoopSslData(allocator, loop);
         const ssl_context = try createSslCtxFromOptions(allocator, options);
         if (ssl_context == null) {
             return error.SslContextCreationFailed;
         }
         const context = try allocator.create(SslSocketContext);
+        errdefer allocator.destroy(context);
         context.* = .{
             .ssl_context = ssl_context,
             .is_parent = true,
         };
-        try context.sc.internalInit(allocator, loop, options, MaybeT);
+        // TODO: free via errdefer?
+        try context.sc.internalInit(allocator, loop, options, ExtensionTypes);
         context.sc.is_ssl = true;
-        if (build_opts.ssl_impl == .openssl) {
+        if (comptime build_opts.ssl_impl == .openssl) {
             _ = ssl.SSL_CTX_callback_ctrl(context.ssl_context, ssl.SSL_CTRL_SET_TLSEXT_SERVERNAME_CB, @as(*fn () callconv(.c) void, @ptrCast(@alignCast(@constCast(&sniCb)))));
-        } else if (build_opts.ssl_impl == .boringssl) {
+        } else if (comptime build_opts.ssl_impl == .boringssl) {
             _ = ssl.SSL_CTX_set_tlsext_servername_callback(context.ssl_context, @ptrCast(@alignCast(&sniCb)));
         }
         _ = ssl.SSL_CTX_set_tlsext_servername_arg(context.ssl_context, context);
@@ -100,7 +102,8 @@ pub const SslSocketContext = struct {
             sni_tree.sniFree(allocator, @ptrCast(@alignCast(self.sni)), sniHostnameDestructor);
         }
         loop_.loopUnlink(self.sc.loop, &self.sc);
-        self.sc.ext.deinit(allocator);
+        for (self.sc.ext) |*e| e.deinit(allocator);
+        allocator.free(self.sc.ext);
         allocator.destroy(self);
     }
 
@@ -108,13 +111,14 @@ pub const SslSocketContext = struct {
         return self.ssl_context;
     }
 
-    pub fn createChildContext(self: *SslSocketContext, allocator: std.mem.Allocator, comptime MaybeT: ?type) !*SslSocketContext {
+    pub fn createChildContext(self: *SslSocketContext, allocator: std.mem.Allocator, comptime ExtensionTypes: []const type) !*SslSocketContext {
         const child = try allocator.create(SslSocketContext);
+        errdefer allocator.destroy(child);
         child.* = .{
             .ssl_context = self.ssl_context,
             .is_parent = false,
         };
-        try child.sc.internalInit(allocator, self.sc.loop, .{}, MaybeT);
+        try child.sc.internalInit(allocator, self.sc.loop, .{}, ExtensionTypes);
         child.sc.is_ssl = true;
         return child;
     }
@@ -136,7 +140,7 @@ pub const SslSocketContext = struct {
             }
 
             if (try sni_tree.sniAdd(allocator, @ptrCast(@alignCast(self.sni)), hostname_pattern, ssl_context)) {
-                freeSslCtx(ssl_context);
+                freeSslCtx(allocator, ssl_context);
             }
         }
     }
@@ -164,24 +168,26 @@ pub const SslSocketContext = struct {
         return @ptrCast(@alignCast(user));
     }
 
-    pub fn listen(self: *SslSocketContext, allocator: std.mem.Allocator, io: std.Io, host: ?[:0]const u8, port: u32, options: u32, comptime MaybeT: ?type) !*ListenSocket {
-        return self.sc.listen(allocator, io, false, host, port, options, MaybeT);
+    pub fn listen(self: *SslSocketContext, allocator: std.mem.Allocator, io: std.Io, host: ?[:0]const u8, port: u32, options: u32, comptime ExtensionTypes: []const type) !*ListenSocket {
+        return self.sc.listen(allocator, io, false, host, port, options, ExtensionTypes);
     }
 
-    pub fn listenUnix(self: *SslSocketContext, allocator: std.mem.Allocator, io: std.Io, path: [:0]const u8, options: u32, comptime MaybeT: ?type) !*ListenSocket {
-        return self.sc.listenUnix(allocator, io, false, path, options, MaybeT);
+    pub fn listenUnix(self: *SslSocketContext, allocator: std.mem.Allocator, io: std.Io, path: [:0]const u8, options: u32, comptime ExtensionTypes: []const type) !*ListenSocket {
+        return self.sc.listenUnix(allocator, io, false, path, options, ExtensionTypes);
     }
 
-    pub fn connect(self: *SslSocketContext, allocator: std.mem.Allocator, io: std.Io, host: [:0]const u8, port: u32, source_host: ?[:0]const u8, options: u32, comptime MaybeT: ?type) !*SslSocket {
+    pub fn connect(self: *SslSocketContext, allocator: std.mem.Allocator, io: std.Io, host: [:0]const u8, port: u32, source_host: ?[:0]const u8, options: u32, comptime ExtensionTypes: []const type) !*SslSocket {
         const res = try allocator.create(SslSocket);
-        try internal.connect(allocator, io, &self.sc, &res.s, host, port, source_host, options, MaybeT);
+        errdefer allocator.destroy(res);
+        try internal.connect(allocator, io, &self.sc, &res.s, host, port, source_host, options, ExtensionTypes);
         res.s.is_ssl = true;
         return res;
     }
 
-    pub fn connectUnix(self: *SslSocketContext, allocator: std.mem.Allocator, io: std.Io, server_path: [:0]const u8, options: u32, comptime MaybeT: ?type) !*SslSocket {
+    pub fn connectUnix(self: *SslSocketContext, allocator: std.mem.Allocator, io: std.Io, server_path: [:0]const u8, options: u32, comptime ExtensionTypes: []const type) !*SslSocket {
         const res = try allocator.create(SslSocket);
-        try internal.connectUnix(allocator, io, &self.sc, &res.s, server_path, options, MaybeT);
+        errdefer allocator.destroy(res);
+        try internal.connectUnix(allocator, io, &self.sc, &res.s, server_path, options, ExtensionTypes);
         res.s.is_ssl = true;
         return res;
     }
@@ -222,8 +228,8 @@ pub const SslSocketContext = struct {
         self.sc.setOnConnectError(false, @ptrCast(@alignCast(cb)));
     }
 
-    pub fn adoptSocket(self: *SslSocketContext, allocator: std.mem.Allocator, s: *SslSocket, comptime ExtensionT: ?type) !*SslSocket {
-        _ = try self.sc.adoptSocket(allocator, false, &s.s, ExtensionT);
+    pub fn adoptSocket(self: *SslSocketContext, allocator: std.mem.Allocator, s: *SslSocket, comptime ExtensionTypes: []const type) !*SslSocket {
+        _ = try self.sc.adoptSocket(allocator, false, &s.s, ExtensionTypes);
         return s;
     }
 };
@@ -601,9 +607,16 @@ fn sniHostnameDestructor(allocator: std.mem.Allocator, user: ?*anyopaque) void {
     freeSslCtx(allocator, @as(?*ssl.SSL_CTX, @ptrCast(@alignCast(user))));
 }
 
-pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, io: std.Io, context: *SslSocketContext, accepted_fd: std.posix.fd_t, addr_ip: []u8, extension: Extension) !*SslSocket {
+pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, io: std.Io, context: *SslSocketContext, accepted_fd: std.posix.fd_t, addr_ip: []u8, extensions: []Extension) !*SslSocket {
     const socket = try allocator.create(SslSocket);
-    try internal.adoptAcceptedSocket(allocator, io, &socket.s, &context.sc, accepted_fd, addr_ip, extension);
+    try internal.adoptAcceptedSocket(allocator, io, &socket.s, &context.sc, accepted_fd, addr_ip, extensions);
+    socket.s.is_ssl = true;
+    return socket;
+}
+
+pub fn adoptAcceptedSocketNewExtensions(allocator: std.mem.Allocator, io: std.Io, context: *SslSocketContext, accepted_fd: std.posix.fd_t, addr_ip: []u8, comptime ExtensionTypes: []const type) !*SslSocket {
+    const socket = try allocator.create(SslSocket);
+    try internal.adoptAcceptedSocketNewExtensions(allocator, io, &socket.s, &context.sc, accepted_fd, addr_ip, ExtensionTypes);
     socket.s.is_ssl = true;
     return socket;
 }

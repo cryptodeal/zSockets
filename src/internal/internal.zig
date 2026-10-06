@@ -44,12 +44,17 @@ pub fn isLowPriority(_: *Socket) LowPriorityQueueState {
     return .not_queued;
 }
 
-pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, io: std.Io, socket: *Socket, context: *SocketContext, accepted_fd: std.posix.fd_t, addr_ip: []u8, extension: Extension) !void {
+pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, io: std.Io, socket: *Socket, context: *SocketContext, accepted_fd: std.posix.fd_t, addr_ip: []u8, extensions: []Extension) !void {
     socket.* = .{
         .context = context,
-        .ext = try extension.dupe(allocator),
+        .ext = try allocator.alloc(Extension, extensions.len),
     };
-    try socket.p.create(allocator, io, context.loop, false, null);
+    errdefer allocator.free(socket.ext);
+    for (0..extensions.len) |i| socket.ext[i] = extensions[i].dupe(allocator) catch |e| {
+        for (0..i) |j| socket.ext[j].deinit(allocator);
+        return e;
+    };
+    try socket.p.create(allocator, io, context.loop, false, &.{});
     socket.p.init(accepted_fd, .socket);
     socket.p.start(context.loop, socket_readable);
     bsd.socketNoDelay(accepted_fd, true);
@@ -57,25 +62,53 @@ pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, io: std.Io, socket: *So
     _ = try context.on_open(allocator, io, socket, false, addr_ip);
 }
 
-pub fn connect(allocator: std.mem.Allocator, io: std.Io, context: *SocketContext, socket: *Socket, host: [:0]const u8, port: u32, source_host: ?[:0]const u8, options: u32, comptime ExtensionT: ?type) !void {
+pub fn adoptAcceptedSocketNewExtensions(allocator: std.mem.Allocator, io: std.Io, socket: *Socket, context: *SocketContext, accepted_fd: std.posix.fd_t, addr_ip: []u8, comptime ExtensionTypes: []const type) !void {
+    socket.* = .{
+        .context = context,
+        .ext = try allocator.alloc(Extension, ExtensionTypes.len),
+    };
+    errdefer allocator.free(socket.ext);
+    inline for (0..ExtensionTypes.len) |i| socket.ext[i] = Extension.init(allocator, ExtensionTypes[i]) catch |e| {
+        for (0..i) |j| socket.ext[j].deinit(allocator);
+        return e;
+    };
+    try socket.p.create(allocator, io, context.loop, false, &.{});
+    socket.p.init(accepted_fd, .socket);
+    socket.p.start(context.loop, socket_readable);
+    bsd.socketNoDelay(accepted_fd, true);
+    context.linkSocket(socket);
+    _ = try context.on_open(allocator, io, socket, false, addr_ip);
+}
+
+pub fn connect(allocator: std.mem.Allocator, io: std.Io, context: *SocketContext, socket: *Socket, host: [:0]const u8, port: u32, source_host: ?[:0]const u8, options: u32, comptime ExtensionTypes: []const type) !void {
     const connect_socket_fd = try bsd.createConnectSocket(host, port, source_host, options);
     socket.* = .{
         .context = context,
-        .ext = try Extension.init(allocator, ExtensionT),
+        .ext = try allocator.alloc(Extension, ExtensionTypes.len),
     };
-    try socket.p.create(allocator, io, context.loop, false, null);
+    errdefer allocator.free(socket.ext);
+    inline for (0..ExtensionTypes.len) |i| socket.ext[i] = Extension.init(allocator, ExtensionTypes[i]) catch |e| {
+        for (0..i) |j| socket.ext[j].deinit(allocator);
+        return e;
+    };
+    try socket.p.create(allocator, io, context.loop, false, &.{});
     socket.p.init(connect_socket_fd, .semi_socket);
     socket.p.start(context.loop, socket_writable);
     context.linkSocket(socket);
 }
 
-pub fn connectUnix(allocator: std.mem.Allocator, io: std.Io, context: *SocketContext, socket: *Socket, server_path: [:0]const u8, options: u32, comptime ExtensionT: ?type) !void {
+pub fn connectUnix(allocator: std.mem.Allocator, io: std.Io, context: *SocketContext, socket: *Socket, server_path: [:0]const u8, options: u32, comptime ExtensionTypes: []const type) !void {
     const connect_socket_fd = try bsd.createConnectSocketUnix(server_path, options);
     socket.* = .{
         .context = context,
-        .ext = try Extension.init(allocator, ExtensionT),
+        .ext = try allocator.alloc(Extension, ExtensionTypes.len),
     };
-    try socket.p.create(allocator, io, context.loop, false, null);
+    errdefer allocator.free(socket.ext);
+    inline for (0..ExtensionTypes.len) |i| socket.ext[i] = Extension.init(allocator, ExtensionTypes[i]) catch |e| {
+        for (0..i) |j| socket.ext[j].deinit(allocator);
+        return e;
+    };
+    try socket.p.create(allocator, io, context.loop, false, &.{});
     socket.p.init(connect_socket_fd, .semi_socket);
     socket.p.start(context.loop, socket_writable);
     context.linkSocket(socket);

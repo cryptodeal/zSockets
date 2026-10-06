@@ -22,32 +22,47 @@ prev: ?*Self = null,
 next: ?*Self = null,
 ls_field_ptr: bool = false,
 is_ssl: bool = false,
-ext: Extension = .{},
+ext: []Extension = &.{},
 
-pub fn adoptInit(allocator: std.mem.Allocator, p: Poll, context: *SocketContext, extension: Extension) !*Self {
+pub fn adoptInit(allocator: std.mem.Allocator, p: Poll, context: *SocketContext, extensions: []Extension) !*Self {
     const self = try allocator.create(Self);
+    errdefer allocator.destroy(self);
     self.* = .{
         .p = p,
         .context = context,
-        .ext = try extension.dupe(allocator),
+        .ext = try allocator.alloc(Extension, extensions.len),
     };
+    errdefer allocator.free(self.ext);
+    for (0..extensions.len) |i| {
+        self.ext[i] = extensions[i].dupe(allocator) catch |e| {
+            for (0..i) |j| self.ext[j].deinit(allocator);
+            return e;
+        };
+    }
     return self;
 }
 
-pub fn init(allocator: std.mem.Allocator, p: Poll, context: *SocketContext, comptime MaybeT: ?type) !*Self {
+pub fn init(allocator: std.mem.Allocator, p: Poll, context: *SocketContext, comptime ExtensionTypes: []const type) !*Self {
     const self = try allocator.create(Self);
+    errdefer allocator.destroy(self);
     self.* = .{
         .p = p,
         .context = context,
-        .ext = try Extension.init(allocator, MaybeT),
+        .ext = try allocator.alloc(Extension, ExtensionTypes.len),
+    };
+    errdefer allocator.free(self.ext);
+    inline for (0..ExtensionTypes.len) |i| self.ext[i] = Extension.init(allocator, ExtensionTypes[i]) catch |e| {
+        for (0..i) |j| self.ext[j].deinit(allocator);
+        return e;
     };
     return self;
 }
 
 pub fn deinit(self: *Self, allocator: std.mem.Allocator, loop: *Loop) void {
     self.p.deinit(allocator, loop);
-    self.ext.deinit(allocator);
-    if (build_opts.ssl_impl != .no_ssl) {
+    for (self.ext) |*e| e.deinit(allocator);
+    allocator.free(self.ext);
+    if (comptime build_opts.ssl_impl != .no_ssl) {
         if (self.is_ssl) {
             const ssl_socket: *openssl.SslSocket = @fieldParentPtr("s", self);
             allocator.destroy(ssl_socket);
@@ -58,14 +73,14 @@ pub fn deinit(self: *Self, allocator: std.mem.Allocator, loop: *Loop) void {
 }
 
 pub fn localPort(self: *Self, _: bool) !u32 {
-    var addr: bsd.AddrT = undefined;
+    var addr: bsd.Addr = undefined;
     if (bsd.localAddr(self.p.fd(), &addr)) {
         return @intCast(addr.port);
     } else |err| return err;
 }
 
 pub fn remotePort(self: *Self, _: bool) !u32 {
-    var addr: bsd.AddrT = undefined;
+    var addr: bsd.Addr = undefined;
     if (bsd.remoteAddr(self.p.fd(), &addr)) {
         return @intCast(addr.port);
     } else |err| return err;
@@ -76,7 +91,7 @@ pub fn shutdownRead(self: *Self, _: bool) void {
 }
 
 pub fn remoteAddress(self: *Self, _: bool, buf: []u8) ![]u8 {
-    var addr: bsd.AddrT = undefined;
+    var addr: bsd.Addr = undefined;
     if (bsd.localAddr(self.p.fd(), &addr)) {
         const ip_len: usize = @intCast(addr.ip_length);
         if (buf.len < ip_len) return error.NoSpaceLeft;
@@ -109,7 +124,7 @@ pub fn flush(self: *Self, _: bool) void {
 }
 
 pub fn serverNameUserdata(self: *Self, ssl: bool) ?*anyopaque {
-    if (build_opts.ssl_impl != .no_ssl) {
+    if (comptime build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             return @as(*openssl.SslSocket, @fieldParentPtr("s", self)).getSniUserdata();
         }
@@ -164,7 +179,7 @@ pub fn close(self: *Self, allocator: std.mem.Allocator, io: std.Io, _: bool, cod
 }
 
 pub fn getNativeHandle(self: *Self, ssl: bool) ?*anyopaque {
-    if (build_opts.ssl_impl != .no_ssl) {
+    if (comptime build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             return @as(*openssl.SslSocket, @fieldParentPtr("s", self)).getNativeHandle();
         }
@@ -182,7 +197,7 @@ pub fn write2(self: *Self, ssl: bool, header: []const u8, payload: []const u8) u
 }
 
 pub fn write(self: *Self, ssl: bool, data: []const u8, msg_more: bool) usize {
-    if (build_opts.ssl_impl != .no_ssl) {
+    if (comptime build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             return @as(*openssl.SslSocket, @fieldParentPtr("s", self)).write(data, msg_more);
         }
@@ -200,9 +215,8 @@ pub fn getExt(self: *Self, comptime T: type) ?*T {
     return @ptrCast(@alignCast(self.ext.ptr));
 }
 
-// unused parameter `ssl: bool`
 pub fn isShutdown(self: *Self, ssl: bool) bool {
-    if (build_opts.ssl_impl != .no_ssl) {
+    if (comptime build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             return @as(*openssl.SslSocket, @fieldParentPtr("s", self)).isShutdown();
         }
@@ -211,7 +225,7 @@ pub fn isShutdown(self: *Self, ssl: bool) bool {
 }
 
 pub fn shutdown(self: *Self, ssl: bool) void {
-    if (build_opts.ssl_impl != .no_ssl) {
+    if (comptime build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
             @as(*openssl.SslSocket, @fieldParentPtr("s", self)).shutdown();
             return;

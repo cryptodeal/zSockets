@@ -133,15 +133,26 @@ pub fn post(allocator: std.mem.Allocator, io: std.Io, loop: *Loop) !void {
     try loop.data.post_cb(allocator, io, loop);
 }
 
-// TODO: unused parameter is `ssl: bool` for future SSL support
-pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, io: std.Io, ssl: bool, context: *SocketContext, accepted_fd: std.posix.socket_t, addr_ip: []u8, extension: Extension) !*Socket {
-    if (build_opts.ssl_impl != .no_ssl) {
+pub fn adoptAcceptedSocketNewExtensions(allocator: std.mem.Allocator, io: std.Io, ssl: bool, context: *SocketContext, accepted_fd: std.posix.socket_t, addr_ip: []u8, comptime ExtensionTypes: []const type) !*Socket {
+    if (comptime build_opts.ssl_impl != .no_ssl) {
         if (ssl) {
-            return &(try openssl.adoptAcceptedSocket(allocator, io, @fieldParentPtr("sc", context), accepted_fd, addr_ip, extension)).s;
+            return &(try openssl.adoptAcceptedSocketNewExtensions(allocator, io, @fieldParentPtr("sc", context), accepted_fd, addr_ip, ExtensionTypes)).s;
         }
     }
     const res = try allocator.create(Socket);
-    try internal.adoptAcceptedSocket(allocator, io, res, context, accepted_fd, addr_ip, extension);
+    try internal.adoptAcceptedSocketNewExtensions(allocator, io, res, context, accepted_fd, addr_ip, ExtensionTypes);
+    return res;
+}
+
+// TODO: unused parameter is `ssl: bool` for future SSL support
+pub fn adoptAcceptedSocket(allocator: std.mem.Allocator, io: std.Io, ssl: bool, context: *SocketContext, accepted_fd: std.posix.socket_t, addr_ip: []u8, extensions: []Extension) !*Socket {
+    if (comptime build_opts.ssl_impl != .no_ssl) {
+        if (ssl) {
+            return &(try openssl.adoptAcceptedSocket(allocator, io, @fieldParentPtr("sc", context), accepted_fd, addr_ip, extensions)).s;
+        }
+    }
+    const res = try allocator.create(Socket);
+    try internal.adoptAcceptedSocket(allocator, io, res, context, accepted_fd, addr_ip, extensions);
     return res;
 }
 
@@ -150,7 +161,7 @@ pub fn internalDispatchReadyPoll(allocator: std.mem.Allocator, io: std.Io, p: *P
         .callback => {
             const cb: *InternalCallback = @fieldParentPtr("p", p);
             if (!cb.leave_poll_ready) {
-                if (build_opts.event_backend != .libuv) {
+                if (comptime build_opts.event_backend != .libuv) {
                     _ = p.acceptEvent();
                 }
             }
@@ -176,7 +187,7 @@ pub fn internalDispatchReadyPoll(allocator: std.mem.Allocator, io: std.Io, p: *P
                 inner: while (bsd.acceptSocket(p.fd(), &addr)) |fd| {
                     client_fd = fd;
                     const context = listen_socket.s.context;
-                    if (context.on_pre_open == null or (try context.on_pre_open.?(allocator, io, client_fd, @as([*]u8, @ptrCast(@alignCast(addr.ip)))[0..@as(usize, @intCast(addr.ip_length))])) == client_fd) {
+                    if (context.on_pre_open == null or (try context.on_pre_open.?(allocator, io, context, client_fd, @as([*]u8, @ptrCast(@alignCast(addr.ip)))[0..@as(usize, @intCast(addr.ip_length))])) == client_fd) {
                         // TODO: update lamda `ext` creation/deletion across varying types to conform to this pattern (when needed)
                         _ = try adoptAcceptedSocket(allocator, io, false, context, client_fd, @as([*]u8, @ptrCast(@alignCast(addr.ip)))[0..@as(usize, @intCast(addr.ip_length))], listen_socket.s.ext);
                         if (listen_socket.s.isClosed(false)) {

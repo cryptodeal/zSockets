@@ -22,9 +22,11 @@ fn closeCbFree(t: ?*libuv.uv_handle_t) callconv(.c) void {
     cb.deinit(cb.allocator);
 }
 
-pub fn createAsync(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, _: bool, comptime Ext: ?type) !*InternalCallback {
-    const cb = try InternalCallback.init(allocator, io, loop, Ext);
+pub fn createAsync(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, _: bool, comptime ExtensionTypes: []const type) !*InternalCallback {
+    const cb = try InternalCallback.init(allocator, io, loop, ExtensionTypes);
+    errdefer cb.deinit(allocator);
     cb.p.callback_payload = try Poll.CallbackPayload.init(allocator, &cb.p);
+    errdefer cb.p.callback_payload.deinit();
     cb.loop = loop;
     cb.server_data = try allocator.create(libuv.uv_async_t);
     return cb;
@@ -48,4 +50,5 @@ pub fn asyncClose(_: std.mem.Allocator, a: *InternalCallback) void {
     libuv.uv_ref(@ptrCast(@alignCast(uv_async)));
     uv_async.?.data = a;
     libuv.uv_close(@ptrCast(@alignCast(uv_async)), &closeCbFree);
+    // a.deinit(allocator);
 }

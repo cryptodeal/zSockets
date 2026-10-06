@@ -14,11 +14,16 @@ state: struct {
     fd: std.posix.fd_t = undefined,
     poll_type: PollType = .polling_out,
 } = .{},
-ext: Extension = .{},
+ext: []Extension = &.{},
 
-pub fn create(self: *Self, allocator: std.mem.Allocator, _: std.Io, loop: *Loop, fallthrough: bool, comptime ExtT: ?type) !void {
+pub fn create(self: *Self, allocator: std.mem.Allocator, _: std.Io, loop: *Loop, fallthrough: bool, comptime ExtensionTypes: []const type) !void {
     if (!fallthrough) loop.polls_count += 1;
-    self.ext = try Extension.init(allocator, ExtT);
+    self.ext = try allocator.alloc(Extension, ExtensionTypes.len);
+    errdefer allocator.free(self.ext);
+    for (0..ExtensionTypes.len) |i| self.ext[i] = Extension.init(allocator, ExtensionTypes[i]) catch |e| {
+        for (0..i) |j| self.ext[j].deinit(allocator);
+        return e;
+    };
 }
 
 pub fn init(self: *Self, fd_: std.posix.fd_t, poll_type: PollType) void {
@@ -28,13 +33,14 @@ pub fn init(self: *Self, fd_: std.posix.fd_t, poll_type: PollType) void {
 
 pub fn deinit(self: *Self, allocator: std.mem.Allocator, loop: *Loop) void {
     loop.polls_count -= 1;
-    self.ext.deinit(allocator);
+    for (self.ext) |*e| e.deinit(allocator);
+    allocator.free(self.ext);
 }
 
 pub fn resize(self: *Self, loop: *Loop) void {
     const events_ = self.events();
     if (events_ != 0) {
-        if (build_opts.event_backend == .epoll) {
+        if (comptime build_opts.event_backend == .epoll) {
             self.state.poll_type = self.pollType();
             self.change(loop, events_);
         } else {
@@ -42,10 +48,6 @@ pub fn resize(self: *Self, loop: *Loop) void {
         }
         loop.updatePendingReadyPolls(self, self, events_, events_);
     }
-}
-
-pub fn getExt(self: *Self, comptime T: type) ?*T {
-    return @ptrCast(@alignCast(self.ext.ptr));
 }
 
 pub fn setType(self: *Self, poll_type: PollType) void {
@@ -58,7 +60,7 @@ pub fn pollType(self: *const Self) PollType {
 
 pub fn start(self: *Self, loop: *Loop, events_: u32) void {
     self.state.poll_type = @enumFromInt(@intFromEnum(self.pollType()) | (if (events_ & constants.socket_readable != 0) @intFromEnum(PollType.polling_in) else 0) | (if (events_ & constants.socket_writable != 0) @intFromEnum(PollType.polling_out) else 0));
-    if (build_opts.event_backend == .epoll) {
+    if (comptime build_opts.event_backend == .epoll) {
         var event: std.os.linux.epoll_event = .{
             .events = events_,
             .data = .{ .ptr = @intFromPtr(self) },
@@ -77,7 +79,7 @@ pub fn change(self: *Self, loop: *Loop, events_: u32) void {
     const old_events = self.events();
     if (old_events != events_) {
         self.state.poll_type = @enumFromInt(@intFromEnum(self.pollType()) | (if (events_ & constants.socket_readable != 0) @intFromEnum(PollType.polling_in) else 0) | (if (events_ & constants.socket_writable != 0) @intFromEnum(PollType.polling_out) else 0));
-        if (build_opts.event_backend == .epoll) {
+        if (comptime build_opts.event_backend == .epoll) {
             var event: std.os.linux.epoll_event = .{
                 .events = events_,
                 .data = .{ .ptr = @intFromPtr(self) },
@@ -92,7 +94,7 @@ pub fn change(self: *Self, loop: *Loop, events_: u32) void {
 pub fn stop(self: *Self, loop: *Loop) void {
     const old_events = self.events();
     const new_events: u32 = 0;
-    if (build_opts.event_backend == .epoll) {
+    if (comptime build_opts.event_backend == .epoll) {
         var event: std.os.linux.epoll_event = undefined;
         _ = std.os.linux.epoll_ctl(loop.fd, std.os.linux.EPOLL.CTL_DEL, self.state.fd, &event);
     }
@@ -111,7 +113,7 @@ pub fn fd(self: *Self) std.posix.fd_t {
 }
 
 pub fn acceptEvent(self: *Self) usize {
-    if (build_opts.event_backend == .epoll) {
+    if (comptime build_opts.event_backend == .epoll) {
         var buf: u64 = undefined;
         _ = std.os.linux.read(self.fd(), std.mem.asBytes(&buf).ptr, @sizeOf(u64));
         return buf;

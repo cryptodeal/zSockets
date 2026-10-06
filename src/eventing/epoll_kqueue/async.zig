@@ -6,17 +6,15 @@ const InternalCallback = @import("../../internal_callback.zig");
 const Loop = @import("loop.zig");
 const Poll = @import("poll.zig");
 
-pub fn createAsync(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallthrough: bool, comptime MaybeT: ?type) !*InternalCallback {
-    if (build_opts.event_backend == .epoll) {
-        const cb = try InternalCallback.init(allocator, io, loop, MaybeT);
-        errdefer cb.deinit(allocator);
+pub fn createAsync(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallthrough: bool, comptime ExtensionTypes: []const type) !*InternalCallback {
+    const cb = try InternalCallback.init(allocator, io, loop, ExtensionTypes);
+    errdefer cb.deinit(allocator);
+    if (comptime build_opts.event_backend == .epoll) {
         try cb.p.create(allocator, io, loop, fallthrough, null);
         cb.p.init(@intCast(std.os.linux.eventfd(0, std.os.linux.EFD.NONBLOCK | std.os.linux.EFD.CLOEXEC)), .callback);
         cb.expects_loop = true;
         return cb;
     } else {
-        const cb = try InternalCallback.init(allocator, io, loop, MaybeT);
-        errdefer cb.deinit(allocator);
         cb.p.state.poll_type = .polling_in;
         cb.expects_loop = true;
         cb.p.setType(.callback);
@@ -27,11 +25,11 @@ pub fn createAsync(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallth
 
 pub fn asyncSet(a: *InternalCallback, cb: *const fn (std.mem.Allocator, std.Io, *InternalCallback) anyerror!void) void {
     a.cb = cb;
-    if (build_opts.event_backend == .epoll) a.p.start(a.loop, constants.socket_readable);
+    if (comptime build_opts.event_backend == .epoll) a.p.start(a.loop, constants.socket_readable);
 }
 
 pub fn asyncWakeup(a: *InternalCallback) void {
-    if (build_opts.event_backend == .epoll) {
+    if (comptime build_opts.event_backend == .epoll) {
         const one: u64 = 1;
         _ = std.os.linux.write(a.p.fd(), std.mem.asBytes(&one).ptr, @sizeOf(u64));
     } else {
@@ -48,7 +46,7 @@ pub fn asyncWakeup(a: *InternalCallback) void {
 }
 
 pub fn asyncClose(allocator: std.mem.Allocator, a: *InternalCallback) void {
-    if (build_opts.event_backend == .epoll) {
+    if (comptime build_opts.event_backend == .epoll) {
         a.p.stop(a.loop);
         _ = std.os.linux.close(a.p.fd());
     } else {

@@ -18,8 +18,8 @@ fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 fn onHttpSocketWritable(_: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
-    const http_socket = s.getExt(HttpSocket).?;
-    const http_context = s.context.getExt(HttpContext).?;
+    const http_socket = s.ext[0].get(HttpSocket).?;
+    const http_context = s.context.ext[0].get(HttpContext).?;
     http_socket.offset += s.write(ssl, http_context.response[http_socket.offset..], false);
     return s;
 }
@@ -35,15 +35,15 @@ fn onHttpSocketEnd(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs
 }
 
 fn onHttpSocketData(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: []u8) !*zs.Socket {
-    const http_socket = s.getExt(HttpSocket).?;
-    const http_context = s.context.getExt(HttpContext).?;
+    const http_socket = s.ext[0].get(HttpSocket).?;
+    const http_context = s.context.ext[0].get(HttpContext).?;
     http_socket.offset = s.write(ssl, http_context.response, false);
     s.setTimeout(ssl, 30);
     return s;
 }
 
 fn onHttpSocketOpen(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
-    const http_socket = s.getExt(HttpSocket).?;
+    const http_socket = s.ext[0].get(HttpSocket).?;
     http_socket.offset = 0;
     s.setTimeout(ssl, 30);
     std.debug.print("Client connected\n", .{});
@@ -61,7 +61,7 @@ pub fn main(init: std.process.Init) !void {
 
     const allocator = std.heap.smp_allocator;
 
-    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, null);
+    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, &.{});
     defer loop.deinit(allocator);
 
     // TODO: enable SSL and pass relevant options
@@ -70,7 +70,7 @@ pub fn main(init: std.process.Init) !void {
         .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
         .passphrase = "1234",
     };
-    const http_context = zs.SocketContext.init(allocator, false, loop, options, HttpContext) catch |err| {
+    const http_context = zs.SocketContext.init(allocator, false, loop, options, &.{HttpContext}) catch |err| {
         std.debug.print("Could not load SSL cert/key\n", .{});
         return err;
     };
@@ -79,7 +79,7 @@ pub fn main(init: std.process.Init) !void {
 
     const body = "<html><body><h1>Why hello there!</h1></body></html>";
 
-    const http_context_ext = http_context.getExt(HttpContext).?;
+    const http_context_ext = http_context.ext[0].get(HttpContext).?;
     var http_context_buffer: [128 + body.len]u8 = undefined;
     http_context_ext.response = try std.fmt.bufPrint(&http_context_buffer, "HTTP/1.1 200 OK\r\nContent-Length: {d}\r\n\r\n{s}", .{ body.len, body });
 
@@ -90,7 +90,7 @@ pub fn main(init: std.process.Init) !void {
     http_context.setOnTimeout(false, &onHttpSocketTimeout);
     http_context.setOnEnd(false, &onHttpSocketEnd);
 
-    if (http_context.listen(allocator, init.io, false, null, 3000, 0, HttpSocket)) |_| {
+    if (http_context.listen(allocator, init.io, false, null, 3000, 0, &.{HttpSocket})) |_| {
         std.debug.print("Listening on port 3000...\n", .{});
         try loop.run(allocator, init.io);
     } else |_| {

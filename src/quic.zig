@@ -17,7 +17,7 @@ const ssl = switch (build_opts.ssl_impl) {
 pub const Socket = extern struct {
     udp_socket: ?*anyopaque = null,
 
-    pub fn createStream(self: *Socket, comptime _: ?type) void {
+    pub fn createStream(self: *Socket, comptime _: []const type) void {
         quic.lsquic_conn_make_stream(@ptrCast(@alignCast(self)));
     }
 };
@@ -49,7 +49,7 @@ pub const SocketContext = struct {
     on_stream_writable: ?*const fn (std.mem.Allocator, std.Io, ?*anyopaque) anyerror!void = null,
     on_open: ?*const fn (std.mem.Allocator, std.Io, *Socket, bool) anyerror!void = null,
     on_close: ?*const fn (std.mem.Allocator, std.Io, *Socket) anyerror!void = null,
-    ext: Extension = .{},
+    ext: []Extension = &.{},
 
     // static values
     const stream_callbacks: quic.lsquic_stream_if = .{
@@ -72,7 +72,7 @@ pub const SocketContext = struct {
         .log_buf = &logBufCb,
     };
 
-    pub fn init(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, options: Options, comptime Ext: ?type) !*SocketContext {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, options: Options, comptime ExtensionTypes: []const type) !*SocketContext {
         std.debug.print("Creating socket context with ssl: {s}\n", .{options.key_file_name});
         const self = try allocator.create(SocketContext);
         errdefer allocator.destroy(self);
@@ -82,11 +82,9 @@ pub const SocketContext = struct {
             .recv_buf = try udp.PacketBuffer.init(allocator),
             .loop = loop,
             .options = options,
-            .ext = try Extension.init(allocator, Ext),
+            .ext = try allocator.alloc(Extension, ExtensionTypes.len),
         };
-        errdefer {
-            allocator.destroy(self);
-        }
+        inline for (0..ExtensionTypes.len) |i| self.ext[i] = try Extension.init(allocator, ExtensionTypes[i]);
         if (0 != quic.lsquic_global_init(quic.LSQUIC_GLOBAL_CLIENT | quic.LSQUIC_GLOBAL_SERVER)) {
             std.process.exit(std.process.exit(1));
         }
@@ -114,12 +112,14 @@ pub const SocketContext = struct {
         self.client_engine = quic.lsquic_engine_new(quic.LSENG_HTTP, &engine_api_client);
         std.debug.print("Engine: 0x{x}\n", .{@intFromPtr(self.engine)});
         std.debug.print("Client Engine: 0x{x}\n", .{@intFromPtr(self.client_engine)});
-        const delay_timer = try createTimer(allocator, io, loop, false, null);
+        const delay_timer = try createTimer(allocator, io, loop, false, &.{});
         timerSet(delay_timer, &timerCb, 50, 50);
         global_engine = self.engine;
         global_client_engine = self.client_engine;
         return self;
     }
+
+    // TODO: pub fn deinit(self: *SocketContext, allocator: std.mem.Allocator) void {}
 
     pub fn setOnStreamData(self: *SocketContext, cb: *const fn (std.mem.Allocator, std.Io, ?*anyopaque, []u8) anyerror!void) void {
         self.on_stream_data = cb;
@@ -179,11 +179,11 @@ pub const SocketContext = struct {
         return false;
     }
 
-    pub fn listen(self: *SocketContext, allocator: std.mem.Allocator, io: std.Io, host: [:0]const u8, port: u32, comptime _: ?type) !*udp.Socket {
+    pub fn listen(self: *SocketContext, allocator: std.mem.Allocator, io: std.Io, host: [:0]const u8, port: u32, comptime _: []const type) !*udp.Socket {
         return udp.Socket.init(allocator, io, self.loop, null, &onUdpSocketData, &onUdpSocketWritable, host, port, self);
     }
 
-    pub fn connect(self: *SocketContext, allocator: std.mem.Allocator, io: std.Io, _: [:0]const u8, _: u32, comptime _: ?type) !?*anyopaque {
+    pub fn connect(self: *SocketContext, allocator: std.mem.Allocator, io: std.Io, _: [:0]const u8, _: u32, comptime _: []const type) !?*anyopaque {
         std.debug.print("Connecting..\n", .{});
         var storage = std.mem.zeroes(std.c.sockaddr.storage);
         var addr: *std.c.sockaddr.in6 = @ptrCast(@alignCast(&storage));

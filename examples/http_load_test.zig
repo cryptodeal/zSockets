@@ -1,4 +1,4 @@
-const argsParser = @import("args");
+const args_parser = @import("args");
 const std = @import("std");
 const zs = @import("zSockets");
 
@@ -38,7 +38,7 @@ fn onPre(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 fn onPost(_: std.mem.Allocator, _: std.Io, _: *zs.Loop) !void {}
 
 fn onHttpSocketWritable(_: std.mem.Allocator, _: std.Io, s: *zs.Socket) !*zs.Socket {
-    const http_socket = s.getExt(HttpSocket).?;
+    const http_socket = s.ext[0].get(HttpSocket).?;
     http_socket.offset += s.write(ssl, request[http_socket.offset .. request.len - http_socket.offset], false);
     return s;
 }
@@ -52,19 +52,19 @@ fn onHttpSocketEnd(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket) !*zs
 }
 
 fn onHttpSocketData(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: []u8) !*zs.Socket {
-    const http_socket = s.getExt(HttpSocket).?;
+    const http_socket = s.ext[0].get(HttpSocket).?;
     http_socket.offset = s.write(ssl, request, false);
     responses += 1;
     return s;
 }
 
 fn onHttpSocketOpen(allocator: std.mem.Allocator, io: std.Io, s: *zs.Socket, _: bool, _: []u8) !*zs.Socket {
-    const http_socket = s.getExt(HttpSocket).?;
+    const http_socket = s.ext[0].get(HttpSocket).?;
     http_socket.offset = 0;
     _ = s.write(ssl, request, false);
     connections -= 1;
     if (connections != 0) {
-        _ = try s.context.connect(allocator, io, ssl, host, port, null, 0, HttpSocket);
+        _ = try s.context.connect(allocator, io, ssl, host, port, null, 0, &.{HttpSocket});
     } else {
         std.debug.print("Running benchmark now...\n", .{});
         s.setTimeout(ssl, zs.constants.timeout_granularity);
@@ -92,7 +92,7 @@ fn onHttpSocketConnectError(_: std.mem.Allocator, _: std.Io, s: *zs.Socket, _: i
 }
 
 pub fn main(init: std.process.Init) !void {
-    const args = try argsParser.parseForCurrentProcess(Options, init, .print);
+    const args = try args_parser.parseForCurrentProcess(Options, init, .print);
     defer args.deinit();
 
     // var gpa = std.heap.DebugAllocator(.{}){};
@@ -122,7 +122,7 @@ pub fn main(init: std.process.Init) !void {
     host = args.options.host;
     connections = args.options.connections;
 
-    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, null);
+    const loop = try zs.Loop.init(allocator, init.io, null, &onWakeup, &onPre, &onPost, &.{});
     defer loop.deinit(allocator);
 
     // TODO: enable SSL and pass relevant options
@@ -131,7 +131,7 @@ pub fn main(init: std.process.Init) !void {
         .cert_file_name = "/Users/cryptodeal/zSockets/misc/valid_server_crt.pem",
         .passphrase = "1234",
     };
-    const http_context = try zs.SocketContext.init(allocator, ssl, loop, options, null);
+    const http_context = try zs.SocketContext.init(allocator, ssl, loop, options, &.{});
     // TODO: implement `SocketContext.deinit`
     defer http_context.deinit(allocator);
 
@@ -144,7 +144,7 @@ pub fn main(init: std.process.Init) !void {
     http_context.setOnEnd(ssl, &onHttpSocketEnd);
     http_context.setOnConnectError(ssl, &onHttpSocketConnectError);
 
-    if (http_context.connect(allocator, init.io, ssl, host, port, null, 0, HttpSocket)) |_| {} else |err| {
+    if (http_context.connect(allocator, init.io, ssl, host, port, null, 0, &.{HttpSocket})) |_| {} else |err| {
         std.debug.print("Cannot connect to server\n", .{});
         return err;
     }
