@@ -1,5 +1,6 @@
 const build_opts = @import("build_opts");
 const constants = @import("constants.zig");
+const linux = @import("../../bsd/linux.zig");
 const std = @import("std");
 const utils = @import("utils.zig");
 
@@ -65,7 +66,7 @@ pub fn start(self: *Self, loop: *Loop, events_: u32) void {
             .events = events_,
             .data = .{ .ptr = @intFromPtr(self) },
         };
-        _ = std.os.linux.epoll_ctl(loop.fd, std.os.linux.EPOLL.CTL_ADD, self.state.fd, &event);
+        _ = linux.epoll_ctl(loop.fd, std.os.linux.EPOLL.CTL_ADD, self.state.fd, &event);
     } else {
         _ = utils.kqueueChange(loop.fd, self.state.fd, 0, events_, self);
     }
@@ -84,7 +85,7 @@ pub fn change(self: *Self, loop: *Loop, events_: u32) void {
                 .events = events_,
                 .data = .{ .ptr = @intFromPtr(self) },
             };
-            _ = std.os.linux.epoll_ctl(loop.fd, std.os.linux.EPOLL.CTL_MOD, self.state.fd, &event);
+            _ = linux.epoll_ctl(loop.fd, std.os.linux.EPOLL.CTL_MOD, self.state.fd, &event);
         } else {
             _ = utils.kqueueChange(loop.fd, self.state.fd, old_events, events_, self);
         }
@@ -96,7 +97,7 @@ pub fn stop(self: *Self, loop: *Loop) void {
     const new_events: u32 = 0;
     if (comptime build_opts.event_backend == .epoll) {
         var event: std.os.linux.epoll_event = undefined;
-        _ = std.os.linux.epoll_ctl(loop.fd, std.os.linux.EPOLL.CTL_DEL, self.state.fd, &event);
+        _ = linux.epoll_ctl(loop.fd, std.os.linux.EPOLL.CTL_DEL, self.state.fd, &event);
     }
     // kqueue automatically removes the fd from the set on close, so we
     // can avoid expensive system call here
@@ -115,7 +116,7 @@ pub fn fd(self: *Self) std.posix.fd_t {
 pub fn acceptEvent(self: *Self) usize {
     if (comptime build_opts.event_backend == .epoll) {
         var buf: u64 = undefined;
-        _ = std.os.linux.read(self.fd(), std.mem.asBytes(&buf).ptr, @sizeOf(u64));
+        _ = linux.read(self.fd(), std.mem.asBytes(&buf).ptr, @sizeOf(u64));
         return buf;
     } else {
         return 0;

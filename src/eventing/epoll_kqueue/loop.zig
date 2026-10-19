@@ -1,4 +1,6 @@
 const std = @import("std");
+const c = @import("../../bsd/c.zig");
+const linux = @import("../../bsd/linux.zig");
 const constants = @import("constants.zig");
 const Extension = @import("../../extension.zig");
 const LoopData = @import("../../internal/loop_data.zig");
@@ -38,7 +40,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, _: ?*anyopaque, wakeup_cb:
     errdefer allocator.destroy(self);
     self.* = .{
         .data = undefined,
-        .fd = if (comptime build_opts.event_backend == .epoll) @intCast(std.os.linux.epoll_create1(std.os.linux.EPOLL.CLOEXEC)) else std.c.kqueue(),
+        .fd = if (comptime build_opts.event_backend == .epoll) @intCast(linux.epoll_create1(std.os.linux.EPOLL.CLOEXEC)) else std.c.kqueue(),
         .ext = try allocator.alloc(Extension, ExtensionTypes.len),
     };
     errdefer allocator.free(self.ext);
@@ -52,7 +54,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, _: ?*anyopaque, wakeup_cb:
 
 pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
     self.data.deinit(allocator);
-    _ = std.c.close(self.fd);
+    _ = c.close(self.fd);
     for (self.ext) |*e| e.deinit(allocator);
     allocator.free(self.ext);
     allocator.destroy(self);
@@ -63,7 +65,7 @@ pub fn run(self: *Self, allocator: std.mem.Allocator, io: std.Io) !void {
     while (self.polls_count != 0) {
         try loop.pre(allocator, io, self);
         if (comptime build_opts.event_backend == .epoll) {
-            self.ready_polls_count = @intCast(std.os.linux.epoll_wait(self.fd, &self.ready_polls, 1024, -1));
+            self.ready_polls_count = @intCast(linux.epoll_wait(self.fd, &self.ready_polls, 1024, -1));
         } else {
             // added timeout (whereas none in uSockets impl)
             const timeout: std.c.timespec = .{ .sec = 0, .nsec = if (self.polls_count > 2) 500000 else 5000000 };

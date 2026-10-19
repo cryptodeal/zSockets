@@ -1,5 +1,6 @@
 const build_opts = @import("build_opts");
 const constants = @import("constants.zig");
+const linux = @import("../../bsd/linux.zig");
 const std = @import("std");
 
 const InternalCallback = @import("../../internal_callback.zig");
@@ -11,7 +12,7 @@ pub fn createAsync(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallth
     errdefer cb.deinit(allocator);
     if (comptime build_opts.event_backend == .epoll) {
         try cb.p.create(allocator, io, loop, fallthrough, &.{});
-        cb.p.init(@intCast(std.os.linux.eventfd(0, std.os.linux.EFD.NONBLOCK | std.os.linux.EFD.CLOEXEC)), .callback);
+        cb.p.init(@intCast(linux.eventfd(0, std.os.linux.EFD.NONBLOCK | std.os.linux.EFD.CLOEXEC)), .callback);
         cb.expects_loop = true;
         return cb;
     } else {
@@ -48,7 +49,7 @@ pub fn asyncWakeup(a: *InternalCallback) void {
 pub fn asyncClose(allocator: std.mem.Allocator, a: *InternalCallback) void {
     if (comptime build_opts.event_backend == .epoll) {
         a.p.stop(a.loop);
-        _ = std.os.linux.close(a.p.fd());
+        _ = linux.close(a.p.fd());
     } else {
         const event: std.posix.Kevent = .{
             .ident = @intFromPtr(&a.p),

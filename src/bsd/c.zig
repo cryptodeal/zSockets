@@ -1,4 +1,5 @@
 const builtin = @import("builtin");
+const epoll = @import("fuzzing/epoll.zig");
 const std = @import("std");
 
 const native_os = builtin.os.tag;
@@ -161,3 +162,104 @@ pub fn supportSendRecvMsgX() bool {
 
 pub extern "c" fn sendmsg_x(s: std.c.fd_t, msgp: [*]const std.c.mmsghdr, cnt: c_uint, flags: c_int) isize;
 pub extern "c" fn recvmsg_x(s: std.c.fd_t, msgp: [*]const std.c.mmsghdr, cnt: c_uint, flags: c_int) isize;
+
+// wrap `std.c` functions, calling epoll fuzzer shim if we're fuzzing
+pub fn send(sockfd: std.c.fd_t, buf: *const anyopaque, len: usize, flags: u32) isize {
+    if (comptime epoll.isEpollFuzzing()) {
+        return epoll.send(sockfd, buf, len, flags);
+    } else {
+        return std.c.send(sockfd, buf, len, flags);
+    }
+}
+
+pub fn recv(
+    sockfd: std.c.fd_t,
+    arg1: ?*anyopaque,
+    arg2: usize,
+    arg3: c_int,
+) if (builtin.os.tag == .windows) c_int else isize {
+    if (comptime epoll.isEpollFuzzing()) {
+        return epoll.recv(sockfd, arg1, arg2, arg3);
+    } else {
+        return std.c.recv(sockfd, arg1, arg2, arg3);
+    }
+}
+
+pub fn listen(sockfd: std.c.fd_t, backlog: c_uint) c_int {
+    if (comptime epoll.isEpollFuzzing()) {
+        return epoll.listen(sockfd, backlog);
+    } else {
+        return std.c.listen(sockfd, backlog);
+    }
+}
+
+pub fn getaddrinfo(
+    noalias node: ?[*:0]const u8,
+    noalias service: ?[*:0]const u8,
+    noalias hints: ?*const std.c.addrinfo,
+    /// On Linux, `res` will not be modified on error and `freeaddrinfo` will
+    /// potentially crash if you pass it an undefined pointer
+    noalias res: *?*std.c.addrinfo,
+) std.c.EAI {
+    if (comptime epoll.isEpollFuzzing()) {
+        return epoll.getaddrinfo(node, service, hints, res);
+    } else {
+        return std.c.getaddrinfo(node, service, hints, res);
+    }
+}
+
+pub fn freeaddrinfo(res: *std.c.addrinfo) void {
+    if (comptime epoll.isEpollFuzzing()) {
+        return epoll.freeaddrinfo(res);
+    } else {
+        return std.c.freeaddrinfo(res);
+    }
+}
+
+pub fn setsockopt(sockfd: std.c.fd_t, level: i32, optname: u32, optval: ?*const anyopaque, optlen: std.c.socklen_t) c_int {
+    if (comptime epoll.isEpollFuzzing()) {
+        return epoll.setsockopt(sockfd, level, optname, optval, optlen);
+    } else {
+        return std.c.setsockopt(sockfd, level, optname, optval, optlen);
+    }
+}
+
+pub fn fcntl(fd: std.c.fd_t, cmd: c_int, arg: c_int) c_int {
+    if (comptime epoll.isEpollFuzzing()) {
+        return epoll.fcntl(fd, cmd, arg);
+    } else {
+        return std.c.fcntl(fd, cmd, arg);
+    }
+}
+
+pub fn bind(sock: std.c.fd_t, address: ?*const std.c.sockaddr, address_len: std.c.socklen_t) c_int {
+    if (comptime epoll.isEpollFuzzing()) {
+        return epoll.bind(sock, address, address_len);
+    } else {
+        return std.c.bind(sock, address, address_len);
+    }
+}
+
+pub fn socket(domain: c_uint, sock_type: c_uint, protocol: c_uint) c_int {
+    if (comptime epoll.isEpollFuzzing()) {
+        return epoll.socket(domain, sock_type, protocol);
+    } else {
+        return std.c.socket(domain, sock_type, protocol);
+    }
+}
+
+pub fn close(fd: std.c.fd_t) c_int {
+    if (comptime epoll.isEpollFuzzing()) {
+        return epoll.c_close(fd);
+    } else {
+        return std.c.close(fd);
+    }
+}
+
+pub fn accept4(sockfd: std.c.fd_t, noalias addr: ?*std.c.sockaddr, noalias addrlen: ?*std.c.socklen_t, flags: c_uint) c_int {
+    if (comptime epoll.isEpollFuzzing()) {
+        return epoll.accept4(sockfd, addr, addrlen, flags);
+    } else {
+        return std.c.accept4(sockfd, addr, addrlen, flags);
+    }
+}

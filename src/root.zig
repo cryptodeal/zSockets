@@ -1,4 +1,5 @@
 //! By convention, root.zig is the root source file when making a package.
+const builtin = @import("builtin");
 const std = @import("std");
 // const build_opts = @import("build_opts");
 
@@ -19,7 +20,9 @@ pub const Timer = @import("internal/internal.zig").Timer;
 pub const quic = @import("quic.zig");
 pub const udp = @import("udp.zig");
 
+pub const testing = @import("bsd/fuzzing/testing.zig");
 pub const constants = @import("internal/constants.zig");
+
 // TODO: maybe expose via `quic` namespace and codegen?
 // pub const lsquic = switch (build_opts.with_quic) {
 //     true => @import("lsquic"),

@@ -1,6 +1,7 @@
 const build_opts = @import("build_opts");
 const constants = @import("constants.zig");
 const builtin = @import("builtin");
+const linux = @import("../../bsd/linux.zig");
 const std = @import("std");
 const Timer = @import("../../internal/internal.zig").Timer;
 
@@ -13,7 +14,7 @@ pub fn createTimer(allocator: std.mem.Allocator, io: std.Io, loop: *Loop, fallth
     errdefer cb.deinit(allocator);
     if (comptime build_opts.event_backend == .epoll) {
         try cb.p.create(allocator, io, loop, fallthrough, &.{});
-        const timer_fd = std.os.linux.timerfd_create(std.os.linux.TIMERFD_CLOCK.REALTIME, .{ .NONBLOCK = true, .CLOEXEC = true });
+        const timer_fd = linux.timerfd_create(std.os.linux.TIMERFD_CLOCK.REALTIME, .{ .NONBLOCK = true, .CLOEXEC = true });
         cb.p.init(@intCast(timer_fd), .callback);
         return cb;
     } else {
@@ -36,7 +37,7 @@ pub fn timerSet(t: *Timer, cb: ?*const fn (std.mem.Allocator, std.Io, *Timer) an
             .it_interval = .{ .sec = @divTrunc(repeat_ms, 1000), .nsec = @rem(repeat_ms, 1000) * 1000000 },
             .it_value = .{ .sec = @divTrunc(ms, 1000), .nsec = @rem(ms, 1000) * 1000000 },
         };
-        _ = std.os.linux.timerfd_settime(internal_cb.p.fd(), @bitCast(@as(u32, 0)), &timer_spec, null);
+        _ = linux.timerfd_settime(internal_cb.p.fd(), @bitCast(@as(u32, 0)), &timer_spec, null);
         internal_cb.p.start(internal_cb.loop, constants.socket_readable);
     } else {
         const event: std.posix.Kevent = .{
@@ -55,7 +56,7 @@ pub fn timerClose(allocator: std.mem.Allocator, timer: *Timer) void {
     const internal_cb: *InternalCallback = @ptrCast(@alignCast(timer));
     if (comptime build_opts.event_backend == .epoll) {
         internal_cb.p.stop(internal_cb.loop);
-        _ = std.c.close(internal_cb.p.fd());
+        _ = linux.close(internal_cb.p.fd());
     } else {
         const event: std.posix.Kevent = .{
             .ident = @intFromPtr(&internal_cb.p),

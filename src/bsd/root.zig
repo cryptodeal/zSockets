@@ -1,5 +1,6 @@
 const builtin = @import("builtin");
 const c = @import("c.zig");
+const linux = @import("linux.zig");
 const EnumError = @import("../internal/internal.zig").EnumError;
 const cmsg = @import("cmsg.zig");
 const constants = @import("constants.zig");
@@ -244,7 +245,7 @@ pub fn udpPacketBufferSetPayload(
 pub fn appleNoSigpipe(fd: std.posix.socket_t) std.posix.socket_t {
     if (builtin.os.tag.isDarwin()) {
         const val: c_int = 1;
-        _ = std.c.setsockopt(fd, std.c.SOL.SOCKET, std.c.SO.NOSIGPIPE, &val, @sizeOf(c_int));
+        _ = c.setsockopt(fd, std.c.SOL.SOCKET, std.c.SO.NOSIGPIPE, &val, @sizeOf(c_int));
     }
     return fd;
 }
@@ -252,21 +253,21 @@ pub fn appleNoSigpipe(fd: std.posix.socket_t) std.posix.socket_t {
 pub fn setNonBlocking(fd: std.posix.socket_t) std.posix.socket_t {
     _ = switch (builtin.os.tag) {
         .windows => {},
-        else => std.c.fcntl(fd, std.c.F.SETFL, std.c.fcntl(fd, std.posix.F.GETFL, @as(c_int, 0)) | @as(c_int, @bitCast(std.posix.O{ .NONBLOCK = true }))),
+        else => c.fcntl(fd, std.c.F.SETFL, c.fcntl(fd, std.posix.F.GETFL, @as(c_int, 0)) | @as(c_int, @bitCast(std.posix.O{ .NONBLOCK = true }))),
     };
     return fd;
 }
 
 pub fn socketNoDelay(fd: std.posix.socket_t, enabled: bool) void {
     const enabled_int: c_int = @intCast(@intFromBool(enabled));
-    _ = std.c.setsockopt(fd, std.c.IPPROTO.TCP, std.c.TCP.NODELAY, &enabled_int, @sizeOf(c_int));
+    _ = c.setsockopt(fd, std.c.IPPROTO.TCP, std.c.TCP.NODELAY, &enabled_int, @sizeOf(c_int));
 }
 
 pub fn socketFlush(fd: std.posix.socket_t) void {
     // TODO: should only handle if TCP_CORK is defined/supported (might be able to simply catch error)
     if (@hasDecl(std.c.TCP, "CORK")) {
         const enabled: c_int = 0;
-        _ = std.c.setsockopt(fd, std.c.IPPROTO.TCP, std.c.TCP.CORK, &enabled, @sizeOf(c_int));
+        _ = c.setsockopt(fd, std.c.IPPROTO.TCP, std.c.TCP.CORK, &enabled, @sizeOf(c_int));
     }
 }
 
@@ -286,7 +287,7 @@ pub fn createSocket(domain: u32, socktype: u32, protocol: u32) !std.posix.socket
     if (!builtin.os.tag.isDarwin() and @hasDecl(std.c.SOCK, "CLOEXEC") and @hasDecl(std.c.SOCK, "NONBLOCK")) {
         flags = std.c.SOCK.CLOEXEC | std.c.SOCK.NONBLOCK;
     }
-    const raw_fd = std.c.socket(@intCast(domain), @intCast(socktype | flags), @intCast(protocol));
+    const raw_fd = c.socket(@intCast(domain), @intCast(socktype | flags), @intCast(protocol));
     switch (std.posix.errno(raw_fd)) {
         .SUCCESS => {},
         .ACCES => return error.PermissionDenied,
@@ -308,21 +309,21 @@ pub fn createSocket(domain: u32, socktype: u32, protocol: u32) !std.posix.socket
 
 pub fn closeSocket(fd: std.posix.socket_t) void {
     _ = switch (builtin.os.tag) {
-        .linux => std.os.linux.close(fd),
+        .linux => linux.close(fd),
         else => std.c.close(fd),
     };
 }
 
 pub fn shutdownSocket(fd: std.posix.socket_t) void {
     _ = switch (builtin.os.tag) {
-        .linux => std.os.linux.shutdown(fd, std.os.linux.SHUT.WR),
+        .linux => linux.shutdown(fd, std.os.linux.SHUT.WR),
         else => std.c.shutdown(fd, std.c.SHUT.WR),
     };
 }
 
 pub fn shutdownSocketRead(fd: std.posix.socket_t) void {
     _ = switch (builtin.os.tag) {
-        .linux => std.os.linux.shutdown(fd, std.os.linux.SHUT.RD),
+        .linux => linux.shutdown(fd, std.os.linux.SHUT.RD),
         // Windows uses SD_RECEIVE, which has the same value as `std.c.SHUT.RD` (0)
         else => std.c.shutdown(fd, std.c.SHUT.RD),
     };
@@ -353,7 +354,7 @@ pub fn localAddr(fd: std.posix.socket_t, addr: *Addr) !void {
 pub fn remoteAddr(fd: std.posix.socket_t, addr: *Addr) !void {
     addr.len = @sizeOf(std.posix.sockaddr.storage);
     switch (builtin.os.tag) {
-        .linux => if (std.os.linux.getpeername(fd, @ptrCast(@alignCast(&addr.mem)), addr.len) != 0) return error.LinuxRemoteAddr,
+        .linux => if (linux.getpeername(fd, @ptrCast(@alignCast(&addr.mem)), addr.len) != 0) return error.LinuxRemoteAddr,
         else => if (std.c.getpeername(fd, @ptrCast(@alignCast(&addr.mem)), addr.len) != 0) return error.RemoteAddr,
     }
     internalFinalizeBsdAddr(addr);
@@ -363,7 +364,7 @@ pub fn acceptSocket(fd: std.posix.socket_t, addr: *Addr) !std.posix.socket_t {
     addr.len = @sizeOf(std.posix.sockaddr.storage);
     const accepted_fd: std.posix.socket_t = switch (builtin.os.tag) {
         .linux => blk: {
-            const ret = std.c.accept4(fd, @ptrCast(@alignCast(addr)), &addr.len, std.os.linux.SOCK.CLOEXEC | std.os.linux.SOCK.NONBLOCK);
+            const ret = c.accept4(fd, @ptrCast(@alignCast(addr)), &addr.len, std.os.linux.SOCK.CLOEXEC | std.os.linux.SOCK.NONBLOCK);
             if (ret == -1) return error.AcceptSocket;
             break :blk @intCast(ret);
         },
@@ -378,7 +379,7 @@ pub fn acceptSocket(fd: std.posix.socket_t, addr: *Addr) !std.posix.socket_t {
 }
 
 pub fn recv(fd: std.posix.socket_t, buf: []u8, flags: i32) isize {
-    return @intCast(std.c.recv(fd, buf.ptr, buf.len, @intCast(flags)));
+    return @intCast(c.recv(fd, buf.ptr, buf.len, @intCast(flags)));
 }
 
 pub fn write2(fd: std.posix.socket_t, header: []const u8, payload: []const u8) isize {
@@ -407,9 +408,9 @@ pub fn write2(fd: std.posix.socket_t, header: []const u8, payload: []const u8) i
 pub fn send(fd: std.posix.socket_t, buf: []const u8, msg_more: bool) isize {
     const msg_nosignal = if (@hasDecl(std.c.MSG, "NOSIGNAL")) std.c.MSG.NOSIGNAL else 0;
     if (@hasDecl(std.c.MSG, "MORE"))
-        return std.c.send(fd, @ptrCast(@alignCast(buf.ptr)), buf.len, @as(u32, @intCast(@intFromBool(msg_more))) * std.c.MSG.MORE | msg_nosignal)
+        return c.send(fd, @ptrCast(@alignCast(buf.ptr)), buf.len, @as(u32, @intCast(@intFromBool(msg_more))) * std.c.MSG.MORE | msg_nosignal)
     else
-        return std.c.send(fd, @ptrCast(@alignCast(buf.ptr)), buf.len, msg_nosignal);
+        return c.send(fd, @ptrCast(@alignCast(buf.ptr)), buf.len, msg_nosignal);
 }
 
 pub fn wouldBlock() bool {
@@ -431,7 +432,7 @@ pub fn createListenSocket(host: ?[:0]const u8, port: u32, options: u32) !std.pos
 
     var port_string_buf: [16]u8 = undefined;
     const port_string: [:0]u8 = try std.fmt.bufPrintSentinel(&port_string_buf, "{d}", .{port}, 0);
-    if (@intFromEnum(std.c.getaddrinfo(if (host) |h| h.ptr else null, port_string.ptr, &hints, &result)) != 0) {
+    if (@intFromEnum(c.getaddrinfo(if (host) |h| h.ptr else null, port_string.ptr, &hints, &result)) != 0) {
         return error.GetAddrInfo;
     }
 
@@ -460,7 +461,7 @@ pub fn createListenSocket(host: ?[:0]const u8, port: u32, options: u32) !std.pos
     }
 
     if (listen_fd == null) {
-        std.c.freeaddrinfo(result.?);
+        c.freeaddrinfo(result.?);
         return error.CreateListenSocket;
     }
     const enabled: c_int = 1;
@@ -470,30 +471,30 @@ pub fn createListenSocket(host: ?[:0]const u8, port: u32, options: u32) !std.pos
         if (builtin.os.tag == .windows) {
             if ((options & 1) != 0) {
                 // hacky workaround for missing `std.c.SO.EXCLUSIVEADDRUSE`
-                _ = std.c.setsockopt(listen_fd.?, std.c.SOL.SOCKET, ~std.c.SO.REUSEADDR, &enabled, @sizeOf(c_int));
+                _ = c.setsockopt(listen_fd.?, std.c.SOL.SOCKET, ~std.c.SO.REUSEADDR, &enabled, @sizeOf(c_int));
             } else {
-                _ = std.c.setsockopt(listen_fd.?, std.c.SOL.SOCKET, ~std.c.SO.REUSEADDR, &enabled, @sizeOf(c_int));
+                _ = c.setsockopt(listen_fd.?, std.c.SOL.SOCKET, ~std.c.SO.REUSEADDR, &enabled, @sizeOf(c_int));
             }
         } else {
             if (@hasDecl(std.c.SO, "REUSEPORT")) {
                 if ((options & 1) == 0) {
-                    _ = std.c.setsockopt(listen_fd.?, std.c.SOL.SOCKET, std.c.SO.REUSEPORT, &enabled, @sizeOf(c_int));
+                    _ = c.setsockopt(listen_fd.?, std.c.SOL.SOCKET, std.c.SO.REUSEPORT, &enabled, @sizeOf(c_int));
                 }
             }
-            _ = std.c.setsockopt(listen_fd.?, std.c.SOL.SOCKET, std.c.SO.REUSEADDR, &enabled, @sizeOf(c_int));
+            _ = c.setsockopt(listen_fd.?, std.c.SOL.SOCKET, std.c.SO.REUSEADDR, &enabled, @sizeOf(c_int));
         }
     }
 
     if (!(@typeInfo(c.IPV6) == .void) and @hasDecl(c.IPV6, "V6ONLY")) {
-        _ = std.c.setsockopt(listen_fd.?, std.c.IPPROTO.IPV6, c.IPV6.V6ONLY, &disabled, @sizeOf(c_int));
+        _ = c.setsockopt(listen_fd.?, std.c.IPPROTO.IPV6, c.IPV6.V6ONLY, &disabled, @sizeOf(c_int));
     }
-    if (std.c.bind(listen_fd.?, listen_addr.addr, listen_addr.addrlen) != 0 or std.c.listen(listen_fd.?, 512) != 0) {
+    if (c.bind(listen_fd.?, listen_addr.addr, listen_addr.addrlen) != 0 or c.listen(listen_fd.?, 512) != 0) {
         closeSocket(listen_fd.?);
-        std.c.freeaddrinfo(result.?);
+        c.freeaddrinfo(result.?);
         return error.CreateListenSocket;
     }
 
-    std.c.freeaddrinfo(result.?);
+    c.freeaddrinfo(result.?);
     return listen_fd.?;
 }
 
@@ -512,7 +513,7 @@ pub fn createListenSocketUnix(path: [:0]const u8, _: u32) !std.posix.socket_t {
     const size = @offsetOf(std.posix.sockaddr.un, "path") + path.len;
     _ = std.c.unlink(path.ptr);
 
-    if (std.c.bind(listen_fd, @ptrCast(@alignCast(&server_address)), @intCast(size)) != 0 or std.c.listen(listen_fd, 512) != 0) {
+    if (c.bind(listen_fd, @ptrCast(@alignCast(&server_address)), @intCast(size)) != 0 or c.listen(listen_fd, 512) != 0) {
         closeSocket(listen_fd);
         return error.CreateListenSocketUnix;
     }
@@ -529,7 +530,7 @@ pub fn createUdpSocket(host: [:0]const u8, port: u32) !std.posix.socket_t {
 
     var port_str_buf: [16]u8 = undefined;
     const port_str: [:0]u8 = try std.fmt.bufPrintSentinel(&port_str_buf, "{d}", .{port}, 0);
-    if (@intFromEnum(std.c.getaddrinfo(host.ptr, port_str.ptr, &hints, &result)) != 0) {
+    if (@intFromEnum(c.getaddrinfo(host.ptr, port_str.ptr, &hints, &result)) != 0) {
         return error.CreateUdpSocket;
     }
 
@@ -558,7 +559,7 @@ pub fn createUdpSocket(host: [:0]const u8, port: u32) !std.posix.socket_t {
     }
 
     if (listen_fd == null) {
-        std.c.freeaddrinfo(result.?);
+        c.freeaddrinfo(result.?);
         return error.CreateUdpSocket;
     }
 
@@ -566,23 +567,23 @@ pub fn createUdpSocket(host: [:0]const u8, port: u32) !std.posix.socket_t {
     const disabled: c_int = 0;
 
     if (port != 0) {
-        _ = std.c.setsockopt(listen_fd.?, std.c.SOL.SOCKET, std.c.SO.REUSEADDR, &enabled, @sizeOf(c_int));
+        _ = c.setsockopt(listen_fd.?, std.c.SOL.SOCKET, std.c.SO.REUSEADDR, &enabled, @sizeOf(c_int));
     }
 
     if (!(@typeInfo(c.IPV6) == .void) and @hasDecl(c.IPV6, "V6ONLY")) {
-        _ = std.c.setsockopt(listen_fd.?, std.c.IPPROTO.IPV6, c.IPV6.V6ONLY, &disabled, @sizeOf(c_int));
+        _ = c.setsockopt(listen_fd.?, std.c.IPPROTO.IPV6, c.IPV6.V6ONLY, &disabled, @sizeOf(c_int));
     }
 
     if (!(@typeInfo(c.IPV6) == .void)) {
         const ipv6_recvpktinfo = if (!@hasDecl(c.IPV6, "RECVPKTINFO")) c.IPV6.PKTINFO else c.IPV6.RECVPKTINFO;
-        if (std.c.setsockopt(listen_fd.?, std.posix.IPPROTO.IPV6, ipv6_recvpktinfo, &enabled, @sizeOf(c_int)) == -1) {
+        if (c.setsockopt(listen_fd.?, std.posix.IPPROTO.IPV6, ipv6_recvpktinfo, &enabled, @sizeOf(c_int)) == -1) {
             if (std.c._errno().* == 92) {
                 if (@hasDecl(c.IP, "PKTINFO")) {
-                    if (std.c.setsockopt(listen_fd.?, std.posix.IPPROTO.IP, c.IP.PKTINFO, &enabled, @sizeOf(c_int)) != 0) {
+                    if (c.setsockopt(listen_fd.?, std.posix.IPPROTO.IP, c.IP.PKTINFO, &enabled, @sizeOf(c_int)) != 0) {
                         std.debug.print("Error setting IPv4 pktinfo!\n", .{});
                     }
                 } else if (@hasDecl(c.IP, "RECVDSTADDR")) {
-                    if (std.c.setsockopt(listen_fd.?, std.posix.IPPROTO.IP, c.IP.RECVDSTADDR, &enabled, @sizeOf(c_int)) != 0) {
+                    if (c.setsockopt(listen_fd.?, std.posix.IPPROTO.IP, c.IP.RECVDSTADDR, &enabled, @sizeOf(c_int)) != 0) {
                         std.debug.print("Error setting IPv4 pktinfo!\n", .{});
                     }
                 }
@@ -592,9 +593,9 @@ pub fn createUdpSocket(host: [:0]const u8, port: u32) !std.posix.socket_t {
         }
     }
 
-    if (std.c.setsockopt(listen_fd.?, std.posix.IPPROTO.IPV6, c.IPV6.RECVTCLASS, &enabled, @sizeOf(c_int)) == -1) {
+    if (c.setsockopt(listen_fd.?, std.posix.IPPROTO.IPV6, c.IPV6.RECVTCLASS, &enabled, @sizeOf(c_int)) == -1) {
         if (std.c._errno().* == 92) {
-            if (std.c.setsockopt(listen_fd.?, std.posix.IPPROTO.IP, c.IP.RECVTOS, &enabled, @sizeOf(c_int)) != 0) {
+            if (c.setsockopt(listen_fd.?, std.posix.IPPROTO.IP, c.IP.RECVTOS, &enabled, @sizeOf(c_int)) != 0) {
                 std.debug.print("Error setting IPv4 ECN!\n", .{});
             }
         } else {
@@ -602,12 +603,12 @@ pub fn createUdpSocket(host: [:0]const u8, port: u32) !std.posix.socket_t {
         }
     }
 
-    if (std.c.bind(listen_fd.?, listen_addr.addr, listen_addr.addrlen) != 0) {
+    if (c.bind(listen_fd.?, listen_addr.addr, listen_addr.addrlen) != 0) {
         closeSocket(listen_fd.?);
-        std.c.freeaddrinfo(result.?);
+        c.freeaddrinfo(result.?);
         return error.CreateUdpSocket;
     }
-    std.c.freeaddrinfo(result.?);
+    c.freeaddrinfo(result.?);
     return listen_fd.?;
 }
 
@@ -649,30 +650,30 @@ pub fn createConnectSocket(host: [:0]const u8, port: u32, source_host: ?[:0]cons
     var port_string_buf: [16]u8 = undefined;
     const port_str: [:0]u8 = try std.fmt.bufPrintSentinel(&port_string_buf, "{d}", .{port}, 0);
 
-    if (@intFromEnum(std.c.getaddrinfo(host.ptr, port_str.ptr, &hints, &result)) != 0) {
+    if (@intFromEnum(c.getaddrinfo(host.ptr, port_str.ptr, &hints, &result)) != 0) {
         return error.CreateConnectSocket;
     }
 
     const fd = createSocket(@intCast(result.?.family), @intCast(result.?.socktype), @intCast(result.?.protocol)) catch |err| {
-        std.c.freeaddrinfo(result.?);
+        c.freeaddrinfo(result.?);
         return err;
     };
 
     if (source_host) |sh| {
         var interface_result: ?*std.posix.addrinfo = null;
-        if (@intFromEnum(std.c.getaddrinfo(sh, null, null, &interface_result)) == 0) {
-            const ret = std.c.bind(fd, interface_result.?.addr, interface_result.?.addrlen);
-            std.c.freeaddrinfo(interface_result.?);
+        if (@intFromEnum(c.getaddrinfo(sh, null, null, &interface_result)) == 0) {
+            const ret = c.bind(fd, interface_result.?.addr, interface_result.?.addrlen);
+            c.freeaddrinfo(interface_result.?);
             if (ret == -1) {
                 closeSocket(fd);
-                std.c.freeaddrinfo(result.?);
+                c.freeaddrinfo(result.?);
                 return error.FailedCreateConnectSocket;
             }
         }
     }
 
     _ = std.c.connect(fd, result.?.addr.?, result.?.addrlen);
-    std.c.freeaddrinfo(result.?);
+    c.freeaddrinfo(result.?);
     return fd;
 }
 
