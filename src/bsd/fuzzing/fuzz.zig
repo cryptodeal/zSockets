@@ -13,7 +13,7 @@ pub fn setTeardown(func: *const fn () void) void {
 
 const File = extern struct {
     type: i32,
-    epev: std.os.linux.epoll_event,
+    epev: std.c.epoll_event,
     prev: ?*File,
     next: ?*File,
 };
@@ -54,7 +54,7 @@ fn allocateFd() i32 {
     for (0..max_fds) |fd| {
         if (fd_to_file[fd] == null) {
             num_fds += 1;
-            return fd + reserved_system_fds;
+            return @intCast(fd + reserved_system_fds);
         }
     }
     return -1;
@@ -71,15 +71,15 @@ fn initFd(fd: i32, @"type": i32, f: *File) void {
 
 fn mapFd(fd: i32) ?*File {
     if (fd >= reserved_system_fds and fd < max_fds + reserved_system_fds) {
-        return fd_to_file[fd - reserved_system_fds];
+        return fd_to_file[@as(usize, @intCast(fd)) - reserved_system_fds];
     }
     return null;
 }
 
 fn freeFd(fd: i32) i32 {
     if (fd >= reserved_system_fds and fd < max_fds + reserved_system_fds) {
-        if (fd_to_file[fd - reserved_system_fds] != null) {
-            fd_to_file[fd - reserved_system_fds] = null;
+        if (fd_to_file[@as(usize, @intCast(fd)) - reserved_system_fds] != null) {
+            fd_to_file[@as(usize, @intCast(fd)) - reserved_system_fds] = null;
             num_fds -= 1;
             return 0;
         }
@@ -90,15 +90,15 @@ fn freeFd(fd: i32) i32 {
 const SocketFile = extern struct {
     base: File,
     addr: extern union {
-        in6: std.os.linux.sockaddr.in6,
-        in: std.os.linux.sockaddr.in,
+        in6: std.c.sockaddr.in6,
+        in: std.c.sockaddr.in,
     },
-    len: std.os.linux.socklen_t,
+    len: std.c.socklen_t,
 };
 
-pub fn read(fd: i32, buf: [*]u8, count: usize) usize {
+pub fn read(fd: std.c.fd_t, buf: [*]u8, count: usize) isize {
     if (fd < reserved_system_fds) {
-        return std.os.linux.read(fd, buf, count);
+        return std.c.read(fd, buf, count);
     }
 
     if (mapFd(fd)) |f| {
@@ -106,7 +106,7 @@ pub fn read(fd: i32, buf: [*]u8, count: usize) usize {
         if (f.type == @intFromEnum(FdType.socket)) {
             if (consumable_data.len == 0) {
                 std.c._errno().* = @intCast(@intFromEnum(std.c.E.WOULDBLOCK));
-                return @bitCast(@as(isize, -1));
+                return -1;
             } else {
                 var data_available: usize = consumable_data[0];
                 consumable_data = consumable_data[1..];
@@ -118,7 +118,7 @@ pub fn read(fd: i32, buf: [*]u8, count: usize) usize {
                 }
                 @memcpy(buf, consumable_data[0..data_available]);
                 consumable_data = consumable_data[data_available..];
-                return data_available;
+                return @intCast(data_available);
             }
         }
 
@@ -133,7 +133,7 @@ pub fn read(fd: i32, buf: [*]u8, count: usize) usize {
         }
     }
 
-    return @bitCast(@as(isize, -1));
+    return -1;
 }
 
 pub fn recv(
@@ -141,8 +141,8 @@ pub fn recv(
     arg1: ?*anyopaque,
     arg2: usize,
     _: c_int,
-) isize {
-    return read(sockfd, arg1, arg2);
+) if (builtin.os.tag == .windows) c_int else isize {
+    return read(sockfd, @ptrCast(@alignCast(arg1)), arg2);
 }
 
 // TODO: ???
@@ -164,8 +164,8 @@ pub fn send(_: std.c.fd_t, _: *const anyopaque, len: usize, _: u32) isize {
     }
 }
 
-pub fn getpeername(fd: i32, noalias addr: *std.os.linux.sockaddr, noalias len: *std.os.linux.socklen_t) usize {
-    if (mapFd(fd)) |f| {
+pub fn getpeername(sockfd: std.c.fd_t, noalias addr: *std.c.sockaddr, noalias len: *std.c.socklen_t) c_int {
+    if (mapFd(sockfd)) |f| {
         if (f.type == @intFromEnum(FdType.socket)) {
             const sf: *SocketFile = @fieldParentPtr("base", f);
             @memcpy(std.mem.asBytes(addr)[0..sf.len], std.mem.asBytes(&sf.addr)[0..sf.len]);
@@ -173,7 +173,7 @@ pub fn getpeername(fd: i32, noalias addr: *std.os.linux.sockaddr, noalias len: *
             return 0;
         }
     }
-    return @bitCast(-1);
+    return -1;
 }
 
 pub fn listen(_: std.c.fd_t, _: c_uint) c_int {
@@ -193,8 +193,6 @@ pub fn getaddrinfo(
     noalias _: ?[*:0]const u8,
     noalias _: ?[*:0]const u8,
     noalias hints: ?*const std.c.addrinfo,
-    /// On Linux, `res` will not be modified on error and `freeaddrinfo` will
-    /// potentially crash if you pass it an undefined pointer
     noalias res: *?*std.c.addrinfo,
 ) std.c.EAI {
     var hints_: *const std.c.addrinfo = undefined;
@@ -204,7 +202,7 @@ pub fn getaddrinfo(
     }
     var b: u8 = undefined;
     if (consumeByte(&b) != 0) {
-        return -1;
+        return @enumFromInt(-1);
     }
     ai.flags = hints_.flags;
     ai.socktype = hints_.socktype;
@@ -226,7 +224,7 @@ pub fn getaddrinfo(
     ai.addrlen = 4;
     ai.addr = null;
     res.* = &ai;
-    return 0;
+    return @enumFromInt(0);
 }
 
 pub fn freeaddrinfo(_: *std.c.addrinfo) void {}
@@ -264,7 +262,7 @@ const EpollFile = extern struct {
     poll_set_tail: ?*File,
 };
 
-pub fn epoll_create1(_: usize) usize {
+pub fn epoll_create1(_: c_uint) c_int {
     const fd = allocateFd();
     if (fd != -1) {
         const ef: *EpollFile = @ptrCast(@alignCast(std.c.malloc(@sizeOf(EpollFile))));
@@ -272,10 +270,10 @@ pub fn epoll_create1(_: usize) usize {
         ef.poll_set_tail = null;
         initFd(fd, @intFromEnum(FdType.epoll), &ef.base);
     }
-    return @bitCast(@as(isize, @intCast(fd)));
+    return @intCast(fd);
 }
 
-pub fn epoll_wait(epoll_fd: i32, events: [*]std.os.linux.epoll_event, maxevents: u32, _: i32) usize {
+pub fn epoll_wait(epoll_fd: std.c.fd_t, events: [*]std.c.epoll_event, maxevents: c_uint, _: c_int) c_int {
     if (mapFd(epoll_fd)) |ef_base| {
         const ef: *EpollFile = @fieldParentPtr("base", ef_base);
         if (consumable_data.len != 0) {
@@ -297,7 +295,7 @@ pub fn epoll_wait(epoll_fd: i32, events: [*]std.os.linux.epoll_event, maxevents:
                     }
                 }
             }
-            return ready_events;
+            return @intCast(ready_events);
         } else {
             teardown();
 
@@ -314,60 +312,36 @@ pub fn epoll_wait(epoll_fd: i32, events: [*]std.os.linux.epoll_event, maxevents:
                     }
                 }
             }
-            return ready_events;
+            return @intCast(ready_events);
         }
     }
-    return @bitCast(@as(isize, -1));
+    return -1;
 }
 
-pub fn timerfd_settime(_: i32, _: std.os.linux.TFD.TIMER, _: *const std.os.linux.itimerspec, _: ?*std.os.linux.itimerspec) usize {
+pub fn timerfd_settime(_: c_int, _: c_int, _: *const std.c.itimerspec, _: ?*std.c.itimerspec) c_int {
     return 0;
 }
 
-pub fn c_close(fd: std.c.fd_t) c_int {
+pub fn close(fd: std.c.fd_t) c_int {
     if (fd < reserved_system_fds) {
         return std.c.close(fd);
     }
     if (mapFd(fd)) |f| {
         if (f.type == @intFromEnum(FdType.epoll)) {
             std.c.free(f);
-            return freeFd(fd);
+            return @intCast(freeFd(fd));
         } else if (f.type == @intFromEnum(FdType.timer)) {
             std.c.free(f);
-            return freeFd(fd);
+            return @intCast(freeFd(fd));
         } else if (f.type == @intFromEnum(FdType.event)) {
             std.c.free(f);
-            return freeFd(fd);
+            return @intCast(freeFd(fd));
         } else if (f.type == @intFromEnum(FdType.socket)) {
             std.c.free(f);
-            const ret = freeFd(fd);
-            return ret;
+            return @intCast(freeFd(fd));
         }
     }
     return -1;
-}
-
-pub fn linux_close(fd: std.os.linux.fd_t) usize {
-    if (fd < reserved_system_fds) {
-        return std.os.linux.close(fd);
-    }
-    if (mapFd(fd)) |f| {
-        if (f.type == @intFromEnum(FdType.epoll)) {
-            std.c.free(f);
-            return @bitCast(@as(isize, @intCast(freeFd(fd))));
-        } else if (f.type == @intFromEnum(FdType.timer)) {
-            std.c.free(f);
-            return @bitCast(@as(isize, @intCast(freeFd(fd))));
-        } else if (f.type == @intFromEnum(FdType.event)) {
-            std.c.free(f);
-            return @bitCast(@as(isize, @intCast(freeFd(fd))));
-        } else if (f.type == @intFromEnum(FdType.socket)) {
-            std.c.free(f);
-            const ret = freeFd(fd);
-            return @bitCast(@as(isize, @intCast(ret)));
-        }
-    }
-    return @bitCast(@as(isize, -1));
 }
 
 pub fn accept4(_: std.c.fd_t, noalias addr: ?*std.c.sockaddr, noalias _: ?*std.c.socklen_t, _: c_uint) c_int {
@@ -401,39 +375,39 @@ const EventFile = extern struct {
     base: File,
 };
 
-pub fn eventfd(_: u32, _: u32) usize {
+pub fn eventfd(_: c_uint, _: c_uint) c_int {
     const fd = allocateFd();
     if (fd != -1) {
         const ef: *EventFile = @ptrCast(@alignCast(std.c.malloc(@sizeOf(EventFile))));
         initFd(fd, @intFromEnum(FdType.event), &ef.base);
     }
-    return @bitCast(@as(isize, @intCast(fd)));
+    return @intCast(fd);
 }
 
 const TimerFile = extern struct {
     base: File,
 };
 
-pub fn timerfd_create(_: std.os.linux.timerfd_clockid_t, _: std.os.linux.TFD) usize {
+pub fn timerfd_create(_: std.c.timerfd_clockid_t, _: c_int) c_int {
     const fd = allocateFd();
     if (fd != -1) {
         const tf: *TimerFile = @ptrCast(@alignCast(std.c.malloc(@sizeOf(TimerFile))));
         initFd(fd, @intFromEnum(FdType.timer), &tf.base);
     }
-    return @bitCast(@as(isize, @intCast(fd)));
+    return @intCast(fd);
 }
 
-pub fn epoll_ctl(epoll_fd: i32, op: u32, fd: i32, ev: ?*std.os.linux.epoll_event) usize {
+pub fn epoll_ctl(epoll_fd: std.c.fd_t, op: c_uint, fd: std.c.fd_t, ev: ?*std.c.epoll_event) c_int {
     const ef: *EpollFile = blk: {
         if (mapFd(epoll_fd)) |tf| {
             break :blk @fieldParentPtr("base", tf);
-        } else return @bitCast(@as(isize, -1));
+        } else return -1;
     };
 
     const f: *File = blk: {
         if (mapFd(fd)) |tf| {
             break :blk tf;
-        } else return @bitCast(@as(isize, -1));
+        } else return -1;
     };
 
     if (op == std.os.linux.EPOLL.CTL_ADD) {
@@ -465,6 +439,6 @@ pub fn epoll_ctl(epoll_fd: i32, op: u32, fd: i32, ev: ?*std.os.linux.epoll_event
     return 0;
 }
 
-pub fn shutdown(_: i32, _: i32) usize {
+pub fn shutdown(_: std.c.fd_t, _: c_int) c_int {
     return 0;
 }

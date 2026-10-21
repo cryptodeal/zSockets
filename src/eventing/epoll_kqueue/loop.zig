@@ -1,6 +1,5 @@
 const std = @import("std");
 const c = @import("../../bsd/c.zig");
-const linux = @import("../../bsd/linux.zig");
 const constants = @import("constants.zig");
 const Extension = @import("../../extension.zig");
 const LoopData = @import("../../internal/loop_data.zig");
@@ -15,7 +14,7 @@ polls_count: i32 = 0,
 ready_polls_count: u32 = 0,
 current_ready_poll: u32 = 0,
 fd: std.posix.fd_t,
-ready_polls: if (build_opts.event_backend == .epoll) [1024]std.os.linux.epoll_event else [1024]std.posix.Kevent = undefined,
+ready_polls: if (build_opts.event_backend == .epoll) [1024]std.c.epoll_event else [1024]std.posix.Kevent = undefined,
 ext: []Extension = &.{},
 
 fn getReadyPoll(self: *Self, index: u32) ?*Poll {
@@ -40,7 +39,7 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, _: ?*anyopaque, wakeup_cb:
     errdefer allocator.destroy(self);
     self.* = .{
         .data = undefined,
-        .fd = if (comptime build_opts.event_backend == .epoll) @intCast(linux.epoll_create1(std.os.linux.EPOLL.CLOEXEC)) else std.c.kqueue(),
+        .fd = if (comptime build_opts.event_backend == .epoll) @intCast(c.epoll_create1(std.os.linux.EPOLL.CLOEXEC)) else std.c.kqueue(),
         .ext = try allocator.alloc(Extension, ExtensionTypes.len),
     };
     errdefer allocator.free(self.ext);
@@ -65,7 +64,7 @@ pub fn run(self: *Self, allocator: std.mem.Allocator, io: std.Io) !void {
     while (self.polls_count != 0) {
         try loop.pre(allocator, io, self);
         if (comptime build_opts.event_backend == .epoll) {
-            self.ready_polls_count = @intCast(linux.epoll_wait(self.fd, &self.ready_polls, 1024, -1));
+            self.ready_polls_count = @intCast(c.epoll_wait(self.fd, &self.ready_polls, 1024, -1));
         } else {
             // added timeout (whereas none in uSockets impl)
             const timeout: std.c.timespec = .{ .sec = 0, .nsec = if (self.polls_count > 2) 500000 else 5000000 };

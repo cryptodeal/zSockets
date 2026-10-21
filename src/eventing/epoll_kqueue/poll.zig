@@ -1,6 +1,6 @@
 const build_opts = @import("build_opts");
 const constants = @import("constants.zig");
-const linux = @import("../../bsd/linux.zig");
+const c = @import("../../bsd/c.zig");
 const std = @import("std");
 const utils = @import("utils.zig");
 
@@ -62,11 +62,11 @@ pub fn pollType(self: *const Self) PollType {
 pub fn start(self: *Self, loop: *Loop, events_: u32) void {
     self.state.poll_type = @enumFromInt(@intFromEnum(self.pollType()) | (if (events_ & constants.socket_readable != 0) @intFromEnum(PollType.polling_in) else 0) | (if (events_ & constants.socket_writable != 0) @intFromEnum(PollType.polling_out) else 0));
     if (comptime build_opts.event_backend == .epoll) {
-        var event: std.os.linux.epoll_event = .{
+        var event: std.c.epoll_event = .{
             .events = events_,
             .data = .{ .ptr = @intFromPtr(self) },
         };
-        _ = linux.epoll_ctl(loop.fd, std.os.linux.EPOLL.CTL_ADD, self.state.fd, &event);
+        _ = c.epoll_ctl(loop.fd, std.os.linux.EPOLL.CTL_ADD, self.state.fd, &event);
     } else {
         _ = utils.kqueueChange(loop.fd, self.state.fd, 0, events_, self);
     }
@@ -81,11 +81,11 @@ pub fn change(self: *Self, loop: *Loop, events_: u32) void {
     if (old_events != events_) {
         self.state.poll_type = @enumFromInt(@intFromEnum(self.pollType()) | (if (events_ & constants.socket_readable != 0) @intFromEnum(PollType.polling_in) else 0) | (if (events_ & constants.socket_writable != 0) @intFromEnum(PollType.polling_out) else 0));
         if (comptime build_opts.event_backend == .epoll) {
-            var event: std.os.linux.epoll_event = .{
+            var event: std.c.epoll_event = .{
                 .events = events_,
                 .data = .{ .ptr = @intFromPtr(self) },
             };
-            _ = linux.epoll_ctl(loop.fd, std.os.linux.EPOLL.CTL_MOD, self.state.fd, &event);
+            _ = c.epoll_ctl(loop.fd, std.os.linux.EPOLL.CTL_MOD, self.state.fd, &event);
         } else {
             _ = utils.kqueueChange(loop.fd, self.state.fd, old_events, events_, self);
         }
@@ -96,8 +96,8 @@ pub fn stop(self: *Self, loop: *Loop) void {
     const old_events = self.events();
     const new_events: u32 = 0;
     if (comptime build_opts.event_backend == .epoll) {
-        var event: std.os.linux.epoll_event = undefined;
-        _ = linux.epoll_ctl(loop.fd, std.os.linux.EPOLL.CTL_DEL, self.state.fd, &event);
+        var event: std.c.epoll_event = undefined;
+        _ = c.epoll_ctl(loop.fd, std.os.linux.EPOLL.CTL_DEL, self.state.fd, &event);
     }
     // kqueue automatically removes the fd from the set on close, so we
     // can avoid expensive system call here
@@ -116,7 +116,7 @@ pub fn fd(self: *Self) std.posix.fd_t {
 pub fn acceptEvent(self: *Self) usize {
     if (comptime build_opts.event_backend == .epoll) {
         var buf: u64 = undefined;
-        _ = linux.read(self.fd(), std.mem.asBytes(&buf).ptr, @sizeOf(u64));
+        _ = c.read(self.fd(), std.mem.asBytes(&buf).ptr, @sizeOf(u64));
         return buf;
     } else {
         return 0;

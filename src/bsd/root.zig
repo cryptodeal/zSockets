@@ -1,6 +1,5 @@
 const builtin = @import("builtin");
 const c = @import("c.zig");
-const linux = @import("linux.zig");
 const EnumError = @import("../internal/internal.zig").EnumError;
 const cmsg = @import("cmsg.zig");
 const constants = @import("constants.zig");
@@ -308,25 +307,15 @@ pub fn createSocket(domain: u32, socktype: u32, protocol: u32) !std.posix.socket
 }
 
 pub fn closeSocket(fd: std.posix.socket_t) void {
-    _ = switch (builtin.os.tag) {
-        .linux => linux.close(fd),
-        else => std.c.close(fd),
-    };
+    _ = c.close(fd);
 }
 
 pub fn shutdownSocket(fd: std.posix.socket_t) void {
-    _ = switch (builtin.os.tag) {
-        .linux => linux.shutdown(fd, std.os.linux.SHUT.WR),
-        else => std.c.shutdown(fd, std.c.SHUT.WR),
-    };
+    _ = c.shutdown(fd, std.c.SHUT.WR);
 }
 
 pub fn shutdownSocketRead(fd: std.posix.socket_t) void {
-    _ = switch (builtin.os.tag) {
-        .linux => linux.shutdown(fd, std.os.linux.SHUT.RD),
-        // Windows uses SD_RECEIVE, which has the same value as `std.c.SHUT.RD` (0)
-        else => std.c.shutdown(fd, std.c.SHUT.RD),
-    };
+    _ = c.shutdown(fd, std.c.SHUT.RD);
 }
 
 fn internalFinalizeBsdAddr(addr: *Addr) void {
@@ -353,10 +342,7 @@ pub fn localAddr(fd: std.posix.socket_t, addr: *Addr) !void {
 
 pub fn remoteAddr(fd: std.posix.socket_t, addr: *Addr) !void {
     addr.len = @sizeOf(std.posix.sockaddr.storage);
-    switch (builtin.os.tag) {
-        .linux => if (linux.getpeername(fd, @ptrCast(@alignCast(&addr.mem)), addr.len) != 0) return error.LinuxRemoteAddr,
-        else => if (std.c.getpeername(fd, @ptrCast(@alignCast(&addr.mem)), addr.len) != 0) return error.RemoteAddr,
-    }
+    if (c.getpeername(fd, @ptrCast(@alignCast(&addr.mem)), addr.len) != 0) return error.LinuxRemoteAddr;
     internalFinalizeBsdAddr(addr);
 }
 
