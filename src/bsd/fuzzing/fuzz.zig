@@ -369,7 +369,7 @@ pub fn accept4(_: std.c.fd_t, noalias addr: ?*std.c.sockaddr, noalias _: ?*std.c
                 sf.addr.in.family = std.c.AF.INET;
             }
             if (addr) |a| {
-                @memcpy(std.mem.asBytes(a)[0..sf.len], std.mem.asBytes(&sf.addr)[0..sf.len]);
+                @memcpy(std.mem.asBytes(@as(*std.c.sockaddr.storage, @ptrCast(@alignCast(a))))[0..sf.len], std.mem.asBytes(&sf.addr)[0..sf.len]);
             }
         }
         return fd;
