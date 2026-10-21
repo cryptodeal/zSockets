@@ -1,8 +1,10 @@
 const builtin = @import("builtin");
+const build_opts = @import("build_opts");
 const std = @import("std");
 
 pub fn isEpollFuzzing() bool {
-    return builtin.is_test and builtin.fuzz and builtin.os.tag == .linux and @import("build_opts").event_backend == .epoll;
+    // TODO: `builtin.fuzz` should be checked, but its not being set to true currently
+    return builtin.is_test and build_opts.epoll_fuzz and builtin.os.tag == .linux and @import("build_opts").event_backend == .epoll;
 }
 
 var teardown: *const fn () void = undefined;

@@ -41,6 +41,9 @@ pub fn build(b: *std.Build) !void {
     const with_quic = b.option(bool, "WITH_QUIC", "builds with QUIC network implementation") orelse false;
     options.addOption(bool, "with_quic", with_quic);
 
+    const epoll_fuzz = b.option(bool, "EPOLL_FUZZ", "Build with epoll functions wrapped for fuzzing") orelse false;
+    options.addOption(bool, "epoll_fuzz", epoll_fuzz);
+
     // TODO: implement SSL options
     const ssl_impl = SslType.fromBuildOptions(.{
         .with_boringssl = b.option(bool, "WITH_BORINGSSL", "enables BoringSSL support, linked statically (preferred over OpenSSL)") orelse false,
