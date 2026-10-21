@@ -105,7 +105,7 @@ pub fn read(fd: std.c.fd_t, buf: [*]u8, count: usize) isize {
         std.c._errno().* = 0;
         if (f.type == @intFromEnum(FdType.socket)) {
             if (consumable_data.len == 0) {
-                std.c._errno().* = @intCast(@intFromEnum(std.c.E.WOULDBLOCK));
+                std.c._errno().* = @intCast(@intFromEnum(std.c.E.AGAIN));
                 return -1;
             } else {
                 var data_available: usize = consumable_data[0];
@@ -154,7 +154,7 @@ pub fn send(_: std.c.fd_t, _: *const anyopaque, len: usize, _: u32) isize {
         consumable_data = consumable_data[1..];
         const written: isize = @as(isize, @intFromFloat(@as(f32, @floatFromInt(scale)) / 255)) * @as(isize, @intCast(len));
         if (written == 0) {
-            std.c._errno().* = @intCast(@intFromEnum(std.c.E.WOULDBLOCK));
+            std.c._errno().* = @intCast(@intFromEnum(std.c.E.AGAIN));
         } else {
             std.c._errno().* = 0;
         }
