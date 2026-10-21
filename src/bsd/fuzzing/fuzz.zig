@@ -198,10 +198,14 @@ pub fn getaddrinfo(
     noalias res: *?*std.c.addrinfo,
 ) std.c.EAI {
     var hints_: *const std.c.addrinfo = undefined;
-    var default_hints = std.mem.zeroInit(std.c.addrinfo, .{});
-    if (hints == null) {
+    var default_hints: std.c.addrinfo = undefined;
+    if (hints) |h| {
+        hints_ = h;
+    } else {
+        default_hints = std.mem.zeroInit(std.c.addrinfo, .{});
         hints_ = &default_hints;
     }
+
     var b: u8 = undefined;
     if (consumeByte(&b) != 0) {
         return @enumFromInt(-1);
